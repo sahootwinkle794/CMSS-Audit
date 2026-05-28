@@ -1,0 +1,20581 @@
+<?php
+class Admin_model extends CI_model {
+
+    private $role;
+
+    function __construct() {
+        parent::__construct();
+        $this->load->helper('date');
+
+        if (ENVIRONMENT == 'production') {
+            $this->db->save_queries = FALSE;
+        }
+        date_default_timezone_set('Asia/Kolkata');
+        $date = date('Y-m-d H:i:s', now());
+        $this->role = $this->session->userdata('role');
+        
+       
+    }
+    public function setBatchImport($batchImport) {
+        $this->_batchImport = $batchImport;
+    }
+     // save data
+    public function importData() {
+        $data = $this->_batchImport;
+        $institute_code = $this->session->userdata("institute_code");
+		date_default_timezone_set('Asia/Kolkata');
+		$date = date('Y-m-d', now());
+		$logged_user = $this->session->userdata('user_name');
+        
+        for($i=0;$i<sizeof($data);$i++)
+		{
+			$appl_no = '';
+			$program_code = '';
+			
+			$txtName = $data[$i]['applicant_name'];
+			$appl_no = $data[$i]['appl_no'];
+			$txtRollNo = $data[$i]['applicant_id'];
+			$txtRank = $data[$i]['field'];
+			$cmbResult = $data[$i]['value'];
+			$round_data = $data[$i]['round_data'];
+			
+			$this->db->select("D.full_name,omr_no,B.applied_program");
+			$this->db->from('admitcard_published B');
+			$this->db->join('applicant_appl_overview C','B.appl_no = C.appl_no','left');
+			$this->db->join('applicant_master D','C.reg_user_id = D.reg_user_id','left');
+			$this->db->where("B.created_by",$institute_code);
+			$this->db->where("B.appl_no",$appl_no);
+			$result = $this->db->get();
+			/*echo $this->db->last_query();
+			die();*/
+			$output_data = $result->result_array();
+			foreach($output_data as $row)
+			{
+				$txtName = $row['full_name'];
+				$txtRollNo = $row['omr_no'];
+				$program_code = $row['applied_program'];
+			}
+			if($txtRank != '')
+			{
+				$program_code = $row['applied_program'];
+				$this->db->where("program_code",$program_code);
+				$this->db->where("applicant_id",$txtRollNo);
+				$this->db->where("round_no",$round_data);
+				$this->db->select("count(program_code) as program_code");
+				$this->db->from("applicant_exam_result");
+				
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach($output_data as $row)
+				{
+					$cnt = $row['program_code'];
+				}
+				
+				
+				if($cnt == '0')
+				{
+					$new_array = array( 
+						"program_code"  	=>$program_code,
+						"applicant_id"  	=>$txtRollNo,
+						"applicant_name"  	=>$txtName,
+						"field"  			=>$cmbResult,
+						"value"  			=>$txtRank,
+						"round_no"  		=>$round_data,
+						"created_by" 		=>$logged_user,
+						"created_on" 		=>$date
+					);
+					$sql = $this->db->insert('applicant_exam_result',$new_array);
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+				}
+				else
+				{
+					$new_array = array( 
+						"applicant_name"  	=>$txtName,
+						"field"  			=>$cmbResult,
+						"value"  			=>$txtRank,
+						"round_no"  		=>$round_data,
+						"created_by" 		=>$logged_user,
+						"created_on" 		=>$date
+					);
+					$this->db->where("program_code",$program_code);
+					$this->db->where("applicant_id",$txtRollNo);
+					$this->db->where("round_no",$round_data);
+					$sql = $this->db->update('applicant_exam_result',$new_array);
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+				}
+			}
+			
+		}
+        
+    }
+    public function excel_onlinepayment($data)
+	{
+		$sel_program_code = $data['program_code'];
+		$seldate = isset($data['selDate']) && $data['selDate'] != ''  ? date('Y-m-d',strtotime($data['selDate'])) : '';
+		
+		if($seldate != '')
+		{
+			$this->db->select('DATE_FORMAT(`B`.`response_datetime`, "%d-%m-%Y") AS response_datetime , A.appl_no, D.full_name,C.created_by,B.sub_category, B.order_number, B.transaction_number, C.amount');
+			$this->db->from('applicant_appl_overview A');
+			$this->db->join('applicant_form_online_deposit B','A.appl_no = B.appl_no','inner');
+			$this->db->join('applicant_form_fee_overview C','A.appl_no = C.appl_no','inner');
+			$this->db->join('applicant_master D','A.reg_user_id = D.reg_user_id AND A.applied_program = D.applied_program','inner');
+			$this->db->where('C.money_deposit_mode','ONLINE');
+			$this->db->where('B.transaction_number !=','');
+			$this->db->where('B.response_datetime !=','');
+			$this->db->where('B.deposit_status','SUCCESS');
+			$this->db->like('B.response_datetime',$seldate,'after');
+			$this->db->where('A.applied_program',$sel_program_code);
+			$this->db->order_by('B.response_datetime','desc');
+			
+		}
+		else
+		{
+			$this->db->select('DATE_FORMAT(`B`.`response_datetime`, "%d-%m-%Y") AS response_datetime, A.appl_no, D.full_name,C.created_by,B.sub_category, B.order_number, B.transaction_number, C.amount');
+			$this->db->from('applicant_appl_overview A');
+			$this->db->join('applicant_form_online_deposit B','A.appl_no = B.appl_no','inner');
+			$this->db->join('applicant_form_fee_overview C','A.appl_no = C.appl_no','inner');
+			$this->db->join('applicant_master D','A.reg_user_id = D.reg_user_id AND A.applied_program = D.applied_program','inner');
+			$this->db->where('C.money_deposit_mode','ONLINE');
+			$this->db->where('B.transaction_number !=','');
+			$this->db->where('B.response_datetime !=','');
+			$this->db->where('B.deposit_status','SUCCESS');
+			$this->db->where('A.applied_program',$sel_program_code);
+			$this->db->order_by('B.response_datetime','desc');
+		}	
+		$query = $this->db->get();
+		/*echo $this->db->last_query();
+		die();*/
+		
+		return $query->result();
+	}
+	
+	public function excel_sc_st($data)
+	{
+		$sel_program_code = $data['program_code'];
+		
+		$where = '(C.category = "SC" OR C.category = "ST" OR C.category = "EBC" OR C.category = "STB"
+	     OR C.category = "STD" OR C.category = "STS" OR C.category = "STW"
+	     OR C.category = "SCB"
+	     OR C.category = "SCD" OR C.category = "SCS" OR C.category = "SCW")';
+		$this->db->select('A.appl_no, C.full_name, A.created_by,A.money_deposit_mode,A.amount');
+		$this->db->from('applicant_form_fee_overview A');
+		$this->db->join('applicant_appl_overview D','A.appl_no = D.appl_no','inner');
+		$this->db->join('applicant_master C','D.reg_user_id = C.reg_user_id AND C.applied_program = D.applied_program','inner');
+		$this->db->where('D.appl_status','Verified');
+		$this->db->where($where);
+		$this->db->where('D.applied_program',$sel_program_code);
+		
+		//print_r($query);
+		$query = $this->db->get();
+		/*echo $this->db->last_query();
+		die();*/
+		
+		return $query->result();
+	}
+	public function excel_upload_result($data)
+	{
+		$institute_code = $this->session->userdata("institute_code");
+		date_default_timezone_set('Asia/Kolkata');
+		$date = date('Y-m-d', now());
+		$logged_user = $this->session->userdata('user_name');
+		
+		$program = $data['program_code'];
+		$round_data = $data['round_data'];
+		
+		$this->db->distinct("B.appl_no");
+		$this->db->select("D.full_name,omr_no,B.appl_no,E.round_no");
+		$this->db->from('admitcard_published B');
+		$this->db->join('admitcard_round_data E','B.omr_no = E.roll_no','left');
+		$this->db->join('applicant_exam_result A','A.applicant_id = B.omr_no AND A.program_code = B.applied_program AND A.round_no = '.$round_data.'','left');
+		$this->db->join('applicant_appl_overview C','B.appl_no = C.appl_no AND B.applied_program = C.applied_program','left');
+		$this->db->join('applicant_master D','C.reg_user_id = D.reg_user_id AND C.applied_program = D.applied_program','left');
+		$this->db->where("B.created_by",$logged_user);
+		$this->db->where("E.round_no",$round_data);
+		$this->db->where("B.record_status",'1');
+		if($program != '')
+		{
+			$this->db->where('B.applied_program',$program);
+		}
+		$query = $this->db->get();
+		/*echo $this->db->last_query();
+		die();*/
+		return $query->result();
+	}
+    
+    public function template008_pdf() {
+		$this->load->driver('session');
+     	$data = array();
+        $view = '';
+        $order_id = 1;
+      	$params = array('c','A4', 0, 'Arial', 10, 10, 8, 5, 0, 0, 'P');
+      	$this->load->library('m_pdf', $params);
+        $this->load->model('m_pdf_model');
+        $data['application_data'] = $this->m_pdf_model->template008_pdf($order_id, 'get_application_detail');
+        $data['applicant_detail'] = $this->m_pdf_model->template008_pdf($order_id, 'get_applicant_detail');
+        $data['applicant_father'] = $this->m_pdf_model->template008_pdf($order_id, 'get_applicant_father');
+        $data['applicant_mother'] = $this->m_pdf_model->template008_pdf($order_id, 'get_applicant_mother');
+        $data['qualification_detail'] = $this->m_pdf_model->template008_pdf($order_id, 'get_qualification_details');
+        $data['fetchInst'] = $this->m_pdf_model->template008_pdf($order_id, 'get_institute_details');
+        $data['addressDetail'] = $this->m_pdf_model->template008_pdf($order_id, 'get_present_address');
+        $data['addressDetail2'] = $this->m_pdf_model->template008_pdf($order_id, 'get_permanent_address');
+        $data['paymentDetail'] = $this->m_pdf_model->template008_pdf($order_id, 'get_payment_detail');
+        $data['otherDetail'] = $this->m_pdf_model->template008_pdf($order_id, 'get_other_information');
+        $data['otherDistrict'] = $this->m_pdf_model->template008_pdf($order_id, 'get_other_district');
+        $data['otherpresentstate'] = $this->m_pdf_model->template008_pdf($order_id, 'get_other_p_state');
+        $data['otherpresentdistrict'] = $this->m_pdf_model->template008_pdf($order_id, 'get_other_p_district');
+        $data['otherpresentdistrict'] = $this->m_pdf_model->template008_pdf($order_id, 'get_other_board');
+        $data['othernationality'] = $this->m_pdf_model->template008_pdf($order_id, 'get_other_nationality');
+        $programcode = $this->session->userdata('admcode');
+        $applicantNumber = $this->session->userdata('appl_no');
+        $data['type'] = "TOP";
+                
+		$html = $this->load->view('pdf/template008_pdf', $data,  true); //load the pdf_output.php by passing our data and get all data in $html varriable.
+        
+        $pdfFilePath = "template008_pdf-" . time() . "-download.pdf";
+		//actually, you can pass mPDF parameter on this load() function
+        $pdf = $this->m_pdf->load();
+        //generate the PDF!
+        $pdf->WriteHTML($html);
+        $pdf->AddPage();
+        $data['type'] = "BOTTOM";
+        $html = $this->load->view('pdf/template008_pdf', $data,  true); //load the pdf_output.php by passing our data and get all data in $html varriable.
+      	$pdf->WriteHTML($html);        
+        $document_upload_url = 'test';
+        $programcode = $this->session->userdata('admcode');
+        $applicantNumber = $this->session->userdata('appl_no');
+		$uploaddir = DOCUMENT_UPLOAD_URL.'/DOCUMENTS/'.$programcode.'/'.$applicantNumber;
+		ob_clean();
+		if(!is_dir($uploaddir))
+			mkdir($uploaddir,0777,true);
+		$pdf->Output($uploaddir.'/application_print_008.pdf', 'F');
+		//$this->load->view('pdf/template008_pdf');	
+		/*$pdf->Output($applicantNumber.".pdf",'I');*/	
+		return true;
+    } 
+    public function template002_pdf() {
+		$this->load->driver('session');
+     	$data = array();
+        $view = '';
+        $order_id = 1;
+        $url_data = $this->uri->uri_to_assoc();
+		$program = $url_data['program'];
+		/*echo $program;
+		die();*/
+      	$params = array('c','A4', 0, 'Arial', 10, 10, 8, 5, 0, 0, 'P');
+      	//echo $program ; die();
+     // 	$this->load->library('m_pdf', $params);
+      	$this->load->library('m_pdf', $params);
+      	
+        $this->load->model('m_pdf_model');
+        $data['application_data'] = $this->m_pdf_model->template001_pdf($program, 'get_application_detail');
+        $data['applicant_detail'] = $this->m_pdf_model->template001_pdf($program, 'get_applicant_detail');
+        $data['applicant_father'] = $this->m_pdf_model->template001_pdf($program, 'get_applicant_father');
+       // print_r($data['applicant_father']);die();
+        $data['applicant_mother'] = $this->m_pdf_model->template001_pdf($program, 'get_applicant_mother');
+        
+        $data['qualification_detail'] = $this->m_pdf_model->template001_pdf($program, 'get_qualification_details');
+        
+        $data['fetchInst'] = $this->m_pdf_model->template001_pdf($program, 'get_institute_details');
+        $data['addressDetail'] = $this->m_pdf_model->template001_pdf($program, 'get_present_address');
+        $data['addressDetail2'] = $this->m_pdf_model->template001_pdf($program, 'get_permanent_address');
+        $data['paymentDetail'] = $this->m_pdf_model->template001_pdf($program, 'get_payment_detail');
+       
+        $data['otherDetail'] = $this->m_pdf_model->template001_pdf($program, 'get_other_information');
+        $data['otherDistrict'] = $this->m_pdf_model->template001_pdf($program, 'get_other_district');
+        $data['otherpresentstate'] = $this->m_pdf_model->template001_pdf($program, 'get_other_p_state');
+        $data['otherpresentdistrict'] = $this->m_pdf_model->template001_pdf($program, 'get_other_p_district');
+        $data['otherpresentdistrict'] = $this->m_pdf_model->template001_pdf($program, 'get_other_board');
+        $data['research_employmen'] = $this->m_pdf_model->template001_pdf($program, 'research_employmen_details');
+        $data['reference_details'] = $this->m_pdf_model->template001_pdf($program, 'reference_details');
+       
+        $data['applicant_documents'] = $this->m_pdf_model->template001_pdf($program, 'get_applicant_documents');
+        $data['tech_qual_data_5'] = $this->m_pdf_model->template001_pdf($program,'get_tech_qual_data_5');
+		$data['tech_qual_data_6'] = $this->m_pdf_model->template001_pdf($program,'get_tech_qual_data_6');
+		$data['tech_qual_data_7'] = $this->m_pdf_model->template001_pdf($program,'get_tech_qual_data_7');
+
+        $data['examcenter'] = $this->m_pdf_model->template001_pdf($program, 'get_exam_center');
+        
+     /* print_r($data['reference_details']);
+		die();*/
+
+        $data['othernationality'] = $this->m_pdf_model->template001_pdf($app_prog, 'get_other_nationality');
+        $data['type'] = "TOP";
+        
+		$html = $this->load->view('pdf/template002_pdf', $data,true); //load the pdf_output.php by passing our data and get all data in $html varriable.
+        /*echo $html;
+        die();*/
+        //$pdfFilePath = "template008_pdf-" . time() . "-download.pdf";
+		//actually, you can pass mPDF parameter on this load() function
+		$pdf = $this->m_pdf->pdf;
+        //generate the PDF!
+		$pdf->WriteHTML($html);
+        /*$pdf->AddPage();
+        $data['type'] = "TOP";
+        $html = $this->load->view('pdf/template008_pdf', $data,  true); //load the pdf_output.php by passing our data and get all data in $html varriable.
+      	$pdf->WriteHTML($html);*/        
+       // $document_upload_url = 'test';
+        $programcode = $this->session->userdata('admcode');
+        $applicantNumber = $this->session->userdata('appl_no');
+		$uploaddir = DOCUMENT_UPLOAD_URL.'/DOCUMENTS/'.$programcode.'/'.$applicantNumber;
+		ob_clean();
+		if(!is_dir($uploaddir))
+			mkdir($uploaddir,0777,true);
+		$pdf->Output($uploaddir.'/application_print.pdf', 'F');
+		chmod($uploaddir.'/application_print.pdf',0777);	
+		$pdf->Output($applicantNumber.".pdf",'I');
+		return true;
+    }
+    public function recurse_copy($src,$dst) { 
+	    $dir = opendir($src); 
+	    @mkdir($dst,0777,true); 
+	    while(false !== ( $file = readdir($dir)) ) { 
+	        if (( $file != '.' ) && ( $file != '..' )) { 
+	            if ( is_dir($src . '/' . $file) ) { 
+	                recurse_copy($src . '/' . $file,$dst . '/' . $file); 
+	            } 
+	            else { 
+	                copy($src . '/' . $file,$dst . '/' . $file); 
+	            } 
+	        } 
+	    } 
+	    closedir($dir); 
+	} 
+	
+    public function diff_in_month($from, $to) {
+        $frmDate = date_create($from);
+        $toDate = date_create($to);
+        $difference = date_diff($toDate, $frmDate, true);
+        $month = $difference->format("%a") / 30;
+        return $month;
+    }
+	public function excel1_report_admit_card_setup()
+	{
+		$institute_code = $this->session->userdata('institute_code');
+		date_default_timezone_set('Asia/Kolkata');
+		$date = date('Y-m-d', now());
+		$year = date('Y', now());
+		$logged_user = $this->session->userdata('user_code');
+		$user_name = $this->session->userdata('user_name');
+		$user_role = $this->session->userdata('role');
+		$this->db->select('PM.program_name,PM.program_code,A.program_code,A.exam_vanue,A.capacity,A.exam_center_address,A.exam_schedule,A.controller_name,A.controller_mobile_no,A.controller_email');	
+        $this->db->from('admitcard_setup A');
+        $this->db->join('program_master PM','A.program_code = PM.program_code','LEFT');
+       	$query = $this->db->get();
+		return $query->result();
+	}
+	public function excel1_report_admit_card($data)
+	{
+		$institute_code = $this->session->userdata('institute_code');
+		date_default_timezone_set('Asia/Kolkata');
+		$date = date('Y-m-d', now());
+		$year = date('Y', now());
+		$logged_user = $this->session->userdata('user_code');
+		$user_name = $this->session->userdata('user_name');
+		$user_role = $this->session->userdata('role');
+		
+		$sel_program_code = $data['program_code'];
+		$exam_center_code = $data['assigned_exam_center_code'];
+		$exam_vanue = $data['exam_vanue'];
+		$from = $data['from'];
+		$to = $data['to'];
+		
+		$ip = $_SERVER['REMOTE_ADDR'];     
+		if($ip){
+		    if (!empty($_SERVER['HTTP_CLIENT_IP'])) 
+			{
+		        $ip = $_SERVER['HTTP_CLIENT_IP'];
+		    } 
+			elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+		        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+		    }
+		//echo $ip;
+		}
+		$url = "http://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+		
+		$output = array();
+		$new_data = array(
+			'user_code' 					=>$user_name,
+			'user_role' 					=>$user_role,
+			'user_ip' 						=>$ip,
+			'url'							=>$url, 
+			'action_type'					=>'DOWNLOAD',
+			'institute_code'					=>$institute_code ,
+			'created_by' 					=>$user_name,
+			'created_on'					=>$date
+		);
+		$insert_user = $this->db->insert('user_activity_details', $new_data);
+		/*echo $this->db->last_query();
+		die();*/
+		
+		
+		
+		$this->db->select('COUNT(*) AS total_count');	
+        $this->db->from('applicant_master A');
+        $this->db->join('applicant_appl_overview B', 'A.reg_user_id = B.reg_user_id AND A.applied_program = B.applied_program', 'INNER');
+        $this->db->join('applicant_form_fee_overview D', 'B.appl_no = D.appl_no', 'INNER');
+        $this->db->join('admitcard_published E', 'B.appl_no = E.appl_no AND A.applied_program = E.applied_program', 'INNER');
+        $this->db->join('exam_centre_master EXM', 'A.applied_program = EXM.program_code AND E.assigned_exam_center = EXM.exam_centre_code', 'INNER');
+        $this->db->join('program_master PM', 'A.applied_program = PM.program_code', 'INNER');
+        $this->db->where('B.appl_status','Verified');
+        $this->db->where('A.applied_program',$sel_program_code);
+        $this->db->where('E.assigned_exam_center',$exam_center_code);
+        $this->db->where('E.assigned_exam_vanue',$exam_vanue);
+        $this->db->where('A.status',1);
+        $this->db->where('E.RECORD_STATUS',1);
+        
+        $result = $this->db->get();
+		//echo $this->db->last_query();
+		$output_data = $result->result_array();
+		$output = array("aaData" => array());
+		foreach ($output_data as $row) 
+        {
+        	$total_count = $row['total_count'];
+        }
+		
+		$x = $from - 1;
+		$y = $to - $from + 1;
+		
+		$this->db->select("A.full_name, B.appl_no, B.form_no, A.reg_user_id, B.updated_on, D.money_deposit_mode, amount,
+							depositdate, F.document_path AS passport_path,G.document_path AS signature_path, money_receipt_no, 
+							A.exam_center_code AS applied_exam_center,EXM.exam_centre_name, E.assigned_exam_center AS assigned_exam_center, 
+							E.omr_no, E.record_status AS publish_status, PM.program_name, ADM.exam_vanue");
+		$this->db->from('applicant_master A');
+		$this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id
+							AND A.applied_program = B.applied_program','LEFT');
+		$this->db->join('applicant_form_fee_overview D','B.appl_no = D.appl_no ','LEFT');
+		$this->db->join('admitcard_published E','B.appl_no = E.appl_no AND A.applied_program = E.applied_program','LEFT');
+		$this->db->join('program_master PM','A.applied_program = PM.program_code','LEFT');
+		$this->db->join('exam_centre_master EXM','A.applied_program = EXM.program_code AND E.assigned_exam_center = EXM.exam_centre_code','LEFT');
+		$this->db->join('admitcard_setup ADM','ADM.program_code = E.applied_program AND ADM.exam_center_code = E.assigned_exam_center AND ADM.exam_vanue_code = E.assigned_exam_vanue ','LEFT');
+		$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='PHO') F",'B.appl_no = F.appl_no','LEFT');
+		$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='SIG') G",'B.appl_no = G.appl_no','LEFT');
+		$this->db->where('B.appl_status','Verified');
+		$this->db->where('A.status','1');
+		$this->db->where('E.record_status','1');
+		$this->db->where('A.applied_program',$sel_program_code);
+		$this->db->where('E.assigned_exam_center',$exam_center_code);
+		$this->db->where('E.assigned_exam_vanue',$exam_vanue);
+		$this->db->order_by("omr_no", "asc");
+		$this->db->limit($y,$x);
+		$query = $this->db->get();
+		//echo $this->db->last_query();die();
+		return $query->result();
+	}
+	
+	
+	public function excel1_report_admit_card_excel()
+	{
+	
+		$this->db->select('COUNT(*) AS total_count');	
+        $this->db->from('admitcard_setup');   
+        $result = $this->db->get();
+		//echo $this->db->last_query();
+		$output_data = $result->result_array();
+		$output = array("aaData" => array());
+		foreach ($output_data as $row) 
+        {
+        	$total_count = $row['total_count'];
+        }
+		
+		/*$x = $from - 1;
+		$y = $to - $from + 1;
+		*/
+		$this->db->select("program_code,exam_vanue,capacity,exam_center_address,exam_schedule,controller_name,controller_mobile_no,controller_email ");
+		$this->db->from('admitcard_setup');
+		$query = $this->db->get();
+		//echo $this->db->last_query();
+		return $query->result();
+	}
+	
+	
+	public function excel_report_scrutiny_excel()
+	{
+		
+		$this->db->select("A.index_no,B.full_name,B.reg_user_id,C.scrutiny_status,C.scrutiny_remark");
+		$this->db->from('applicant_appl_overview AS A');
+		$this->db->join('applicant_master AS B','A.reg_user_id=B.reg_user_id AND A.applied_program=B.applied_program','left');
+		$this->db->join('applicant_reg_master AS C','B.applied_program=C.applied_program AND B.reg_user_id=C.reg_user_id','left');
+		$this->db->where('A.appl_status','Verified');
+		$query = $this->db->get();
+		//echo $this->db->last_query();
+		return $query->result();
+	}
+	
+	
+	public function excel2_report_admit_card($data)
+	{
+		$institute_code = $this->session->userdata('institute_code');
+		date_default_timezone_set('Asia/Kolkata');
+		$date = date('Y-m-d', now());
+		$year = date('Y', now());
+		$logged_user = $this->session->userdata('user_code');
+		$user_name = $this->session->userdata('user_name');
+		$user_role = $this->session->userdata('role');
+		
+		$sel_program_code = $data['program_code'];
+		$exam_center_code = $data['assigned_exam_center_code'];
+		$exam_vanue = $data['exam_vanue'];
+		$from = $data['from'];
+		$to = $data['to'];
+		
+		$ip = $_SERVER['REMOTE_ADDR'];     
+		if($ip){
+		    if (!empty($_SERVER['HTTP_CLIENT_IP'])) 
+			{
+		        $ip = $_SERVER['HTTP_CLIENT_IP'];
+		    } 
+			elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+		        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+		    }
+		//echo $ip;
+		}
+		$url = "http://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+		
+		$output = array();
+		$new_data = array(
+			'user_code' 					=>$user_name,
+			'user_role' 					=>$user_role,
+			'user_ip' 						=>$ip,
+			'url'							=>$url, 
+			'action_type'					=>'DOWNLOAD',
+			'institute_code'					=>$institute_code ,
+			'created_by' 					=>$user_name,
+			'created_on'					=>$date
+		);
+		$insert_user = $this->db->insert('user_activity_details', $new_data);
+		/*echo $this->db->last_query();
+		die();*/
+		
+		$x = $from - 1;
+		$y = $to - $from + 1;
+		
+		$this->db->select("A.full_name, B.appl_no, B.form_no, A.reg_user_id, B.updated_on, D.money_deposit_mode, amount,
+							depositdate, F.document_path AS passport_path,G.document_path AS signature_path, money_receipt_no, 
+							A.exam_center_code AS applied_exam_center,EXM.exam_centre_name, E.assigned_exam_center AS assigned_exam_center, 
+							E.omr_no, E.record_status AS publish_status, PM.program_name, ADM.exam_vanue");
+		$this->db->from('applicant_master A');
+		$this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id
+							AND A.applied_program = B.applied_program','LEFT');
+		$this->db->join('applicant_form_fee_overview D','B.appl_no = D.appl_no ','LEFT');
+		$this->db->join('admitcard_published E','B.appl_no = E.appl_no AND A.applied_program = E.applied_program','LEFT');
+		$this->db->join('program_master PM','A.applied_program = PM.program_code','LEFT');
+		$this->db->join('exam_centre_master EXM','A.applied_program = EXM.program_code AND E.assigned_exam_center = EXM.exam_centre_code','LEFT');
+		$this->db->join('admitcard_setup ADM','ADM.program_code = E.applied_program AND ADM.exam_center_code = E.assigned_exam_center AND ADM.exam_vanue_code = E.assigned_exam_vanue ','LEFT');
+		$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='PHO') F",'B.appl_no = F.appl_no','LEFT');
+		$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='SIG') G",'B.appl_no = G.appl_no','LEFT');
+		$this->db->where('B.appl_status','Verified');
+		$this->db->where('A.status','1');
+		$this->db->where('E.record_status','1');
+		$this->db->where('A.applied_program',$sel_program_code);
+		$this->db->where('E.assigned_exam_center',$exam_center_code);
+		$this->db->where('E.assigned_exam_vanue',$exam_vanue);
+		$this->db->order_by("omr_no", "asc");
+		$this->db->limit($y,$x);
+		$query = $this->db->get();
+		/*echo $this->db->last_query();
+		die();*/
+		
+		return $query->result();
+	}
+    /**
+     * 	Generate random registration_no 
+     */
+    public function rand_number($length) {
+        $chars = "0123456789";
+        return substr(str_shuffle($chars), 0, $length);
+    }
+
+    public function admin($data, $op, $stage = null) {
+        /**
+		* logic: To operate data for superadmin master setup
+		* date :11/09/2017
+		*/
+        switch ($op) {
+        	/**
+			* logic: To operate data for User Master
+			* case:get_user_data,add_user,edit_user,delete_user,get_role
+			* author:Rahul Patro
+			* date :11/09/2017
+			*/
+			case 'validate_institute':
+				$ins =  encrypt_decrypt('decrypt', $data);
+				if($ins == '0')
+				{
+					$ins = '';
+				} 
+				$this->db->select('ins.*');
+				$this->db->from('institute_master as ins');
+				$this->db->where('ins.institute_code',$ins);
+				//print_r($query);
+				$result = $this->db->get();
+				//print_r($result);
+				//echo $this->db->last_query();
+				$result->result_array();
+				if($result->num_rows() > 0) {
+					  return array('status'=>true, 'msg'=>'Present');
+				}
+				else
+				{
+					return array('status'=>false, 'msg'=>'Not Present');
+				}
+			break;
+			case 'validate_program':
+				
+				$this->db->select('p.*');
+				$this->db->from('program_master as p');
+				$this->db->where('p.program_code',$data);
+				//print_r($query);
+				$result = $this->db->get();
+				//print_r($result);
+				$result->result_array();
+				if($result->num_rows() > 0) {
+					  return array('status'=>true, 'msg'=>'Present');
+				}
+				else
+				{
+					return array('status'=>false, 'msg'=>'Not Present');
+				}
+			break;
+			case 'get_institute_data':
+				$ins = $data;
+				//$ins =  encrypt_decrypt('decrypt', $data);
+				if($ins == '0') 
+					$ins = '';
+				$this->db->select('institute_code,institute_name,image_url');
+				$this->db->from('institute_master as ins');
+				$this->db->where('ins.institute_code',$ins);
+				//print_r($query);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				//print_r($result);
+				return $result->result_array();
+			break;
+			case 'get_sidebar':
+				$this->db->select('A.*');
+				$this->db->from('menu_master as A');
+				$this->db->where('A.role_code',$this->session->userdata('role'));
+				$this->db->where('A.record_status',1);
+				$this->db->order_by('A.sl_no','asc');
+				$result = $this->db->get();
+				return $result->result_array();
+			break;
+			case 'get_active_program_list':
+				$this->db->select('program_name, program_code,program_group');
+				$this->db->from('program_master');
+				$this->db->where('status','Active');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				return $result1 = $result->result_array();
+			case 'get_uploaded_document_list':
+				$this->db->select('applied_program, COUNT(*) AS cnt');
+				$this->db->from('applicant_appl_overview');
+				$this->db->where('appl_status','Document Uploaded');
+				$this->db->group_by('applied_program');
+				$result = $this->db->get();
+				return $result1 = $result->result_array();
+			break;
+			
+			case 'exam_venue_data':
+				$sel_program_code = $_POST['program_code'];
+				$output = array("aaData" => array());
+				$this->db->select("IFNULL(MAX(SUBSTRING_INDEX(exam_vanue_code,'/',-1))+1, '1') AS exam_vanue_code");
+				$this->db->from("admitcard_setup");
+				$this->db->where("program_code",$sel_program_code);
+			
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$exam_vanue_code = '';
+				foreach ($output_data as $aRow) 
+                {
+                    $exam_vanue_code = $aRow['exam_vanue_code'];
+                }
+				$new_sl_no = $exam_vanue_code;
+				$changed_sl_no = '';
+				if($new_sl_no < 10)
+					$changed_sl_no = '00'.$new_sl_no;
+				else if($new_sl_no < 100)
+					$changed_sl_no = '0'.$new_sl_no;
+				
+				$exam_vanue_code = 'EXVEN'."/".$changed_sl_no;
+				
+				$output = array('exam_vanue_code'=>$exam_vanue_code);
+               	return $output;
+			break;
+			
+			case 'get_allOnlinePayments':
+				$sel_program_code = $data;
+				$seldate = isset($_POST['txtTransDate']) && $_POST['txtTransDate'] != ''  ? date('Y-m-d',strtotime($_POST['txtTransDate'])) : '';
+				
+				if($seldate != '')
+				{
+					$this->db->select('DATE_FORMAT(`B`.`response_datetime`, "%d-%m-%Y") AS response_datetime,  A.appl_no, D.full_name,C.created_by,B.sub_category, B.order_number, B.transaction_number, C.amount');
+					$this->db->from('applicant_appl_overview A');
+					$this->db->join('applicant_form_online_deposit B','A.appl_no = B.appl_no','inner');
+					$this->db->join('applicant_form_fee_overview C','A.appl_no = C.appl_no','inner');
+					$this->db->join('applicant_master D','A.reg_user_id = D.reg_user_id AND A.applied_program = D.applied_program','inner');
+					$this->db->where('C.money_deposit_mode','ONLINE');
+					$this->db->where('B.transaction_number !=','');
+					$this->db->where('B.response_datetime !=','');
+					$this->db->where('B.deposit_status','SUCCESS');
+					$this->db->like('B.response_datetime',$seldate,'after');
+					$this->db->where('A.applied_program',$sel_program_code);
+					$this->db->order_by('B.response_datetime','desc');
+					
+				}
+				else
+				{
+					$this->db->select('DATE_FORMAT(`B`.`response_datetime`, "%d-%m-%Y") AS response_datetime, A.appl_no, D.full_name,C.created_by,B.sub_category, B.order_number, B.transaction_number, C.amount');
+					$this->db->from('applicant_appl_overview A');
+					$this->db->join('applicant_form_online_deposit B','A.appl_no = B.appl_no','inner');
+					$this->db->join('applicant_form_fee_overview C','A.appl_no = C.appl_no','inner');
+					$this->db->join('applicant_master D','A.reg_user_id = D.reg_user_id AND A.applied_program = D.applied_program','inner');
+					$this->db->where('C.money_deposit_mode','ONLINE');
+					$this->db->where('B.transaction_number !=','');
+					$this->db->where('B.response_datetime !=','');
+					$this->db->where('B.deposit_status','SUCCESS');
+					$this->db->where('A.applied_program',$sel_program_code);
+					$this->db->order_by('B.response_datetime','desc');
+				}	
+				//print_r($query);
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				//print_r($result);
+				return $result->result_array();
+			break;
+			case 'get_all_sc_st':
+				$sel_program_code = $data['program_code'];
+				//$ins = $data;
+				$where = '(C.category = "SC" OR C.category = "ST" OR C.category = "EBC" OR C.category = "STB"
+			     OR C.category = "STD" OR C.category = "STS" OR C.category = "STW"
+			     OR C.category = "SCB"
+			     OR C.category = "SCD" OR C.category = "SCS" OR C.category = "SCW")';
+				$this->db->select('A.appl_no, C.full_name, A.created_by,A.money_deposit_mode,A.amount');
+				$this->db->from('applicant_form_fee_overview A');
+				$this->db->join('applicant_appl_overview D','A.appl_no = D.appl_no','inner');
+				$this->db->join('applicant_master C','D.reg_user_id = C.reg_user_id AND D.applied_program = C.applied_program','inner');
+				$this->db->where('D.appl_status','Verified');
+				$this->db->where($where);
+				$this->db->where('D.applied_program',$sel_program_code);
+			
+				//print_r($query);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				//print_r($result);
+				return $result->result_array();
+			break;
+			case 'get_online_paid_list':
+				$this->db->select('applied_program, COUNT(*) AS cnt');
+				$this->db->from('applicant_form_fee_overview A');
+				$this->db->join("applicant_appl_overview B","B.appl_no = A.appl_no","inner");
+				$this->db->join("applicant_form_online_deposit C","B.appl_no = C.appl_no","inner");
+				$this->db->where('C.deposit_status','SUCCESS');
+				$this->db->where('money_receipt_no !=','');
+				$this->db->where('A.money_deposit_mode','ONLINE');
+				$this->db->group_by('applied_program');
+				$result = $this->db->get();
+				return $result1 = $result->result_array();
+			break;
+			case 'get_challan_verified_list':
+				$this->db->select('applied_program, COUNT(*) AS cnt');
+				$this->db->from('applicant_form_fee_overview A');
+				$this->db->join("applicant_appl_overview B","B.appl_no = A.appl_no","inner");
+				$this->db->join("applicant_form_challan_deposit C","A.appl_no = C.appl_no","inner");
+				$this->db->where('appl_status','Verified');
+				$this->db->where('deposit_status','Deposited');
+				$this->db->where('money_receipt_no !=','');
+				$this->db->where('A.money_deposit_mode','CHALLAN');
+				$this->db->group_by('applied_program');
+				$result = $this->db->get();
+				return $result1 = $result->result_array();
+			break;
+			case 'get_SCST_list':
+				$this->db->select('A.applied_program, COUNT(*) AS cnt');
+				$this->db->from('applicant_master A');
+				$this->db->join("applicant_appl_overview B","A.reg_user_id = B.reg_user_id","inner");
+				$this->db->where_in("category" ,'("SC", "ST", "EBC")');
+				$this->db->where('appl_status','Verified');
+				$this->db->group_by('A.applied_program');
+				$result = $this->db->get();
+				return $result1 = $result->result_array();
+			break;
+			case 'get_OnCounter_list':
+				$this->db->select('applied_program, COUNT(*) AS cnt');
+				$this->db->from('applicant_form_fee_overview A');
+				$this->db->join("applicant_appl_overview B","B.appl_no = A.appl_no","inner");
+				$this->db->where('A.money_deposit_mode','ON THE COUNTER');
+				$this->db->group_by('applied_program');
+				$result = $this->db->get();
+				return $result1 = $result->result_array();
+			break;
+			case 'get_all_program_list':
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$sel_program_group = $this->session->flashdata('sel_program_group');
+				//echo $sel_program_group;
+				//die();
+				$user = $logged_user.'_'.$institute_code;
+				$this->db->distinct(" P.program_group ");
+				$this->db->select("A.sl_no, P.program_group ");
+				$this->db->from('program_master P');
+				$this->db->join("user_program_mapping U","P.program_code = U.program_code","inner");
+				$this->db->join("program_group_master A","P.program_group = A.program_group_name ","inner");
+				$this->db->where('P.record_status','1');
+				$this->db->where('U.record_status','1');
+				$this->db->where('A.record_status','1');
+				$this->db->where('P.institute_code',$institute_code);
+				$this->db->where('U.institute_code',$institute_code);
+				$this->db->where('U.user_code',$user);
+				$this->db->order_by('A.sl_no');
+				
+				$result = $this->db->get();
+				return $result1 = $result->result_array();
+			break;
+            case 'get_userdata':
+                $order = '';
+                $Ocolumn = '';
+                $Odir = '';
+                $order = $this->input->post('order');
+                if ($order) {
+                    foreach ($order as $row) {
+                        $Ocolumn = $row['column'];
+                        $Odir = $row['dir'];
+                    }
+                    $this->db->order_by($Ocolumn, $Odir);
+                } else {
+                    $this->db->order_by(1, "ASC");
+                }
+                $search = $this->input->post('search');
+                $header = array('user_name', 'user_display_name');//search filter will work on this column
+                if ($search['value'] != '') {
+                    for ($i = 0; $i < count($header); $i++) {
+                        $this->db->or_like($header[$i], $search['value']);
+                    }
+                }
+
+                $iDisplayLength = $this->input->post('length');//to shw number of record to be shown
+                $iDisplayStart = $this->input->post('start');//to start from that position (ex: offset)
+
+                $this->db->limit($iDisplayLength, $iDisplayStart);
+                $this->db->from('user_master');
+                $this->db->select("user_code,user_name,user_display_name,password,profile_img,record_status");
+               	
+               	$res = $this->db->get();
+                $query = $res->result_array();
+                $output = array("aaData" => array());
+				/*----FOR PAGINATION-----*/
+                if ($search['value'] != '') {
+                    for ($i = 0; $i < count($header); $i++) {
+                        $this->db->or_like($header[$i], $search['value']);
+                    }
+                }
+
+                $this->db->from('user_master');
+                $this->db->select("user_code,user_name,user_display_name,password,profile_img,record_status");
+                
+                $res1 = $this->db->get();
+                
+                $output["draw"] = intval($this->input->post('draw'));
+                $output['iTotalRecords'] = $res1->num_rows();
+                $output['iTotalDisplayRecords'] = $res1->num_rows();
+                $slno = 1;
+                foreach ($query as $aRow) {
+                    $row[0] = $slno;
+                    $row['sl_no'] = $slno;
+                    $i = 1;
+                    foreach ($aRow as $key => $value) {
+
+                        $row[$i] = $value;
+                        $row[$key] = $value;
+                        $i++;
+                    }
+					$output['aaData'][] = $row;
+                    $slno++;
+                    unset($row);
+                }
+                return $output;
+			break;
+            case 'add_user':
+            	$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	$qry = $this->db->query("SELECT MAX(id)+1 AS max_id FROM user_master");
+				$Sresult = $qry->result_array();
+				$row2 = array_shift($Sresult);
+				$data = array( "user_code" =>$row2['max_id'].rand(1000,99999),
+								"user_name" => $this->input->post('txtUserName'),
+								"password" => $this->input->post('txtPassword'),
+								"user_display_name" => $this->input->post('txtDisplayName'),
+								"record_status" => $this->input->post('user_status'),
+								"created_by" => 'superadmin',
+								"created_on" => date('Y-m-d H:i:s', now())
+							);
+				$insert_user = $this->db->insert('user_master',$data);
+				if( ! $insert_user){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}
+				return array('status'=>$dbstatus,'msg'=>$dbmessage);
+			break;
+			case 'edit_user':
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+				$data = array( "user_name" => $this->input->post('txtUserName'),
+								"password" => $this->input->post('txtPassword'),
+								"user_display_name" => $this->input->post('txtDisplayName'),
+								"record_status" => $this->input->post('user_status'),
+								"updated_by" => 'superadmin'
+							);
+				$this->db->where('user_code',$this->input->post('hiduser_code'));
+				$insert_user = $this->db->update('user_master',$data);
+				if($this->db->affected_rows() ==0){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}
+			    return array('status'=>$dbstatus,'msg'=>$dbmessage);
+            break;
+            case 'delete_user':
+                $dbstatus = TRUE;
+            	$dbmessage = 'Data deleted successfully';
+                $new_data = array(
+                    "record_status" => 0,
+					"updated_by" => 'superadmin'
+                );
+                //print_r($new_data);die();
+                $this->db->where('user_code',$this->input->post('user_code'));
+                $deleteuser = $this->db->update('user_master', $new_data);
+                if ($this->db->affected_rows() ==0){
+                    $dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}
+				return array('status' => $dbstatus, 'msg' => $dbmessage);
+            break;
+            /**
+			* logic: To operate data for menu master
+			* case:get_role,get_url_link,get_parent_menu,get_menudata,add_menu,edit_menu,delete_menu,copy_menu
+			* author:Ashish narayan barick
+			* date :11/09/2017
+			*/
+            case'get_role' :
+            	$this->db->select('*');
+            	$this->db->from('role_master');
+            	$this->db->where("record_status",1);
+				$role_res = $this->db->get();
+				$role_data ='';
+				if ($role_res->num_rows() > 0) {
+					$role_data = $role_res->result_array();
+					foreach ($role_data as $key => $role):
+						$this->db->select('menu_id,resource_code');
+						$this->db->where("role_code",$role['role_code']);
+						$parent_res = $this->db->get('menu_master');
+						if ($parent_res->num_rows() > 0) {
+							$parent_data = $parent_res->result_array();
+							$role_data[$key]['parent_data'] = $parent_data;
+						}
+					endforeach;
+				}
+				return $role_data;
+				
+				
+			break;
+			case 'get_url_link':
+				$output = array("aaData" => array());
+				$this->db->select("resource_code,resource_name");
+				$this->db->from("resource_master");
+				$this->db->where("record_status",1);
+				$this->db->order_by("id");
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				return $output_data;
+			break;
+			case 'get_parent_menu' :
+				$output = array("aaData" => array());
+				$role = $data['cmbRole'];
+				$this->db->select("menu_id,resource_code");
+				$this->db->from("menu_master");
+				$this->db->where("record_status",1);
+				$this->db->where("role_code",$role);
+				$this->db->where("parent_id",0);
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				return $output_data;
+			break;
+            case 'get_menudata':
+				$order = '';
+                $Ocolumn = '';
+                $Odir = '';
+                $order = $this->input->post('order');
+                if ($order) {
+                    foreach ($order as $row) {
+                        $Ocolumn = $row['column'];
+                        $Odir = $row['dir'];
+                    }
+                    $this->db->order_by($Ocolumn, $Odir);
+                } else {
+                    $this->db->order_by(1, "ASC");
+                }
+                $search = $this->input->post('search');
+                $header = array('user_name', 'user_display_name');//search filter will work on this column
+                if ($search['value'] != '') {
+                    for ($i = 0; $i < count($header); $i++) {
+                        $this->db->or_like($header[$i], $search['value']);
+                    }
+                }
+				if($data['menu_role'])
+					$this->db->where(" m1.role_code",$data['menu_role']);
+                $iDisplayLength = $this->input->post('length');//to shw number of record to be shown
+                $iDisplayStart = $this->input->post('start');//to start from that position (ex: offset)
+
+                $this->db->limit($iDisplayLength, $iDisplayStart);
+                $this->db->select("r.role_name,m1.menu_name,m1.resource_code,m1.parent_id,
+									m1.sl_no,
+									CASE WHEN m1.has_child = 1 THEN 'Yes' 
+									WHEN m1.has_child = 0 THEN 'No' 
+									ELSE '' END AS has_child,
+									CASE WHEN m1.is_last_child = 1 THEN 'Yes' 
+									WHEN m1.is_last_child = 0 THEN 'No' 
+									ELSE '' END AS is_last_child,m1.access_type,m1.icon_class,
+									m1.menu_id,m1.role_code,m1.target");
+				$this->db->from("role_master r,menu_master m1");
+				$this->db->join("(SELECT menu_name,parent_id,menu_id 
+							FROM menu_master 
+							WHERE record_status=1) b","b.menu_id = m1.parent_id", "LEFT");
+				$this->db->where("m1.role_code = r.role_code");
+				$this->db->where("m1.record_status",1);
+				
+				$res = $this->db->get();
+                $query = $res->result_array();
+                $output = array("aaData" => array());
+                /*----FOR PAGINATION -----*/
+                if ($search['value'] != '') 
+                {
+                    for ($i = 0; $i < count($header); $i++) 
+                    {
+                        $this->db->or_like($header[$i], $search['value']);
+                    }
+                }
+                if($data['menu_role'])
+					$this->db->where(" m1.role_code",$data['menu_role']);
+				$this->db->select("r.role_name,m1.menu_name,m1.resource_code,m1.parent_id,
+									m1.sl_no,
+									CASE WHEN m1.has_child = 1 THEN 'Yes' 
+									WHEN m1.has_child = 0 THEN 'No' 
+									ELSE '' END AS has_child,
+									CASE WHEN m1.is_last_child = 1 THEN 'Yes' 
+									WHEN m1.is_last_child = 0 THEN 'No' 
+									ELSE '' END AS is_last_child,m1.access_type,m1.icon_class,
+									m1.menu_id,m1.role_code,m1.target");
+				$this->db->from("role_master r,menu_master m1");
+				$this->db->join("(SELECT menu_name,parent_id,menu_id 
+							FROM menu_master 
+							WHERE record_status=1) b","b.menu_id = m1.parent_id", "LEFT");
+				$this->db->where("m1.role_code = r.role_code");
+				$this->db->where("m1.record_status",1);
+				 
+                $res1 = $this->db->get();
+                
+                $output["draw"] = intval($this->input->post('draw'));
+                $output['iTotalRecords'] = $res1->num_rows();
+                $output['iTotalDisplayRecords'] = $res1->num_rows();
+                $slno = 1;
+                foreach ($query as $aRow) 
+                {
+                    $row[0] = $slno;
+                    $row['sl_no'] = $slno;
+                    $i = 1;
+                    foreach ($aRow as $key => $value) {
+
+                        $row[$i] = $value;
+                        $row[$key] = $value;
+                        $i++;
+                    }
+					$output['aaData'][] = $row;
+                    $slno++;
+                    unset($row);
+                }
+               	return $output; // Data Send to the controller then datatable
+			break;
+			case 'add_menu':
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+				$linktext = ($this->input->post('txtmenulinktext')!= null)?$this->input->post('txtmenulinktext'):'';
+				$role = ($this->input->post('cmbMenuRole')!= null)?$this->input->post('cmbMenuRole'):'';
+				$resource = ($this->input->post('cmbMenuLinkURL')!= null)?$this->input->post('cmbMenuLinkURL'):'';
+				$parent_id = ($this->input->post('cmbMenuParent')!= null)?$this->input->post('cmbMenuParent'):'';
+				$sl_no = ($this->input->post('txtMenuslno')!= null)?$this->input->post('txtMenuslno'):'';
+				$chkHasChild = ($this->input->post('txtHaschild')!= null)?$this->input->post('txtHaschild'):'';
+				$chkIsLastChild = ($this->input->post('txtislastchild')!= null)?$this->input->post('txtislastchild'):'';
+				$iconClass = ($this->input->post('txtIconClass')!= null)?$this->input->post('txtIconClass'):'';
+				$menuAccess = ($this->input->post('cmbMenuAccess')!= null)?$this->input->post('cmbMenuAccess'):'';
+				$target = ($this->input->post('txtNewWindow')!= null)?$this->input->post('txtNewWindow'):'';
+				
+				$hasChild = ($chkHasChild == "Yes")?"1":"0";
+				$isLastChild = ($chkIsLastChild == "Yes")?"1":"0";
+				$new_data = array(
+                    'menu_name' =>$linktext,
+                    'role_code' =>$role,
+                    'resource_code' => $resource,
+                    'parent_id' => $parent_id,
+                    'sl_no' => $sl_no,
+                    'has_child' => $hasChild,
+                    'is_last_child' => $isLastChild,
+                    'icon_class' =>$iconClass,
+                    'access_type' => $menuAccess,
+                    'target' => $target,
+                    'created_by' => 'superadmin',
+                    'created_on' => 'NOW()'
+               	);
+               if ($this->db->insert('menu_master', $new_data))
+                	return array('status' => $dbstatus, 'msg' => $dbmessage);
+            	else 
+            		return array('status' => FALSE, 'msg' => 'Error While Saving');
+			break;
+			case 'edit_menu':
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data updated successfully';
+				$linktext = ($this->input->post('txtmenulinktext')!= null)?$this->input->post('txtmenulinktext'):'';
+				$role = ($this->input->post('cmbMenuRole')!= null)?$this->input->post('cmbMenuRole'):'';
+				$resource = ($this->input->post('cmbMenuLinkURL')!= null)?$this->input->post('cmbMenuLinkURL'):'';
+				$parent_id = ($this->input->post('cmbMenuParent')!= null)?$this->input->post('cmbMenuParent'):'';
+				$sl_no = ($this->input->post('txtMenuslno')!= null)?$this->input->post('txtMenuslno'):'';
+				$chkHasChild = ($this->input->post('txtHaschild')!= null)?$this->input->post('txtHaschild'):'';
+				$chkIsLastChild = ($this->input->post('txtislastchild')!= null)?$this->input->post('txtislastchild'):'';
+				$iconClass = ($this->input->post('txtIconClass')!= null)?$this->input->post('txtIconClass'):'';
+				$menuAccess = ($this->input->post('cmbMenuAccess')!= null)?$this->input->post('cmbMenuAccess'):'';
+				$target = ($this->input->post('txtNewWindow')!= null)?$this->input->post('txtNewWindow'):'';
+				$hasChild = ($chkHasChild == "Yes")?"1":"0";
+				$isLastChild = ($chkIsLastChild == "Yes")?"1":"0";
+				$new_data = array(
+                    'menu_name' =>$linktext,
+                    'role_code' =>$role,
+                    'resource_code' => $resource,
+                    'parent_id' => $parent_id,
+                    'sl_no' => $sl_no,
+                    'has_child' => $hasChild,
+                    'is_last_child' => $isLastChild,
+                    'icon_class' =>$iconClass,
+                    'access_type' => $menuAccess,
+                    'target' => $target,
+                    'updated_by' => 'superadmin',
+                    'updated_on' => 'NOW()'
+               	);
+				$this->db->where('menu_id', $this->input->post('hidMenuId'));
+                $this->db->update('menu_master', $new_data);
+                if ($this->db->affected_rows())
+                    return array('status' => $dbstatus, 'msg' => $dbmessage);
+                else 
+                	return array('status' => 'FAILURE', 'msg' => 'Error while updating');
+	        break;
+	        case 'delete_menu':
+	        	$dbstatus = TRUE;
+            	$dbmessage = 'Data deleted successfully';
+           		$data_delete = array('record_status'=>0);
+				$this->db->where('menu_id', $this->input->post('menu_id'));
+				$this->db->update('menu_master',$data_delete);
+				if ($this->db->affected_rows())
+	                return array('status' => $dbstatus, 'msg' => $dbmessage);
+                else 
+                	return array('status' => 'FAILURE', 'msg' => 'Error while deleting');
+			break;
+			case 'copy_menu':
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data copied successfully';
+				$cmbRole = ($this->input->get('cmbRole')!= null)?$this->input->get('cmbRole'):'';
+				$cmbCopyRole = ($this->input->get('cmbCopyRole')!= null)?$this->input->get('cmbCopyRole'):'';
+				$sql = "SELECT COUNT(menu_id) AS counting
+						FROM 
+						menu_master
+						WHERE 
+						role_code = '$cmbCopyRole'
+						AND record_status = 1"; 
+		        $query = $this->db->query($sql);
+				$result = $query->row_array();
+				$counting = $result['counting'];
+				if($counting == 0)
+				{
+					$sql = "INSERT INTO menu_master 
+					(role_code,menu_name,resource_code,parent_id,sl_no,has_child,
+					is_last_child,icon_class,target,access_type,created_by,created_on)
+					SELECT '$cmbCopyRole' AS role_code,menu_name,resource_code,parent_id,sl_no,has_child,
+					is_last_child,icon_class,target,access_type,created_by,created_on FROM menu_master
+					WHERE 
+						record_status= 1 
+						AND role_code = '$cmbRole'";
+					$query = $this->db->query($sql);
+					//var_dump($query->num_rows());
+					if ($this->db->affected_rows())
+	                    return array('status' => $dbstatus, 'dbMessage' => $dbmessage);
+	                else 
+	                	return array('status' => 'FAILURE', 'dbMessage' => "Data already exists for this role. Please delete all the data to copy from other role.");
+				}
+			break;
+			case 'add_application_data_02':
+			
+				
+				$dbstatus = TRUE;
+				$cmbExamCenter = isset($_POST['cmbExamCenter']) ? $_POST['cmbExamCenter'] : '';
+				$txtFirstName = isset($_POST['txtFirstName']) ? trim($_POST['txtFirstName']) : '';
+
+				$master_name = isset($_POST['master_name']) ? trim($_POST['master_name']) : '';
+				$center_name1 = isset($_POST['center_name1']) ? trim($_POST['center_name1']) : '';
+				$center_code1 = isset($_POST['center_code1']) ? trim($_POST['center_code1']) : '';
+				$center_name2 = isset($_POST['center_name2']) ? trim($_POST['center_name2']) : '';
+				$center_code2 = isset($_POST['center_code2']) ? trim($_POST['center_code2']) : '';
+				$center_name3 = isset($_POST['center_name3']) ? trim($_POST['center_name3']) : '';
+				$center_code3 = isset($_POST['center_code3']) ? trim($_POST['center_code3']) : '';
+				
+				
+
+				$FathersProfession = isset($_POST['FathersProfession']) ? trim($_POST['FathersProfession']) : '';
+				$FathersIncome = isset($_POST['FathersIncome']) ? trim($_POST['FathersIncome']) : '';
+				$cmbNorthState = isset($_POST['cmbNorthState']) ? trim($_POST['cmbNorthState']) : '';
+
+				$txtMotherName = isset($_POST['txtMotherName']) ? trim($_POST['txtMotherName']) : '';
+				$MothersProfession = isset($_POST['MothersProfession']) ? trim($_POST['MothersProfession']) : '';
+				$MothersIncome = isset($_POST['MothersIncome']) ? trim($_POST['MothersIncome']) : '';
+				$mothers_adhar_no = isset($_POST['txtUidM']) ? trim($_POST['txtUidM']) : '';
+				$fathers_adhar_no = isset($_POST['txtUidF']) ? trim($_POST['txtUidF']) : '';
+				 
+
+
+
+				$employed = isset($_POST['employed']) ? trim($_POST['employed']) : 'NO';
+				$Employer_address = isset($_POST['Employer_address']) ? trim($_POST['Employer_address']) : '';
+				$Employer_from = isset($_POST['Employer_from']) ? trim($_POST['Employer_from']) : '';
+				$Employer_to = isset($_POST['Employer_to']) ? trim($_POST['Employer_to']) : '';
+				$Employer_address1 = isset($_POST['Employer_address1']) ? trim($_POST['Employer_address1']) : '';
+				$Employer_from1 = isset($_POST['Employer_from1']) ? trim($_POST['Employer_from1']) : '';
+				$Employer_to1 = isset($_POST['Employer_to1']) ? trim($_POST['Employer_to1']) : '';
+
+
+
+
+				$cand_name = isset($_POST['cand_name']) ? trim($_POST['cand_name']) : '';
+				$co_name = isset($_POST['co_name']) ? trim($_POST['co_name']) : '';
+				$city_name = isset($_POST['city_name']) ? trim($_POST['city_name']) : '';
+				$phone_no = isset($_POST['phone_no']) ? trim($_POST['phone_no']) : '';
+				$cand_name1 = isset($_POST['cand_name1']) ? trim($_POST['cand_name1']) : '';
+				$co_name1 = isset($_POST['co_name1']) ? trim($_POST['co_name1']) : '';
+				$city_name1 = isset($_POST['city_name1']) ? trim($_POST['city_name1']) : '';
+				$phone_no1 = isset($_POST['phone_no1']) ? trim($_POST['phone_no1']) : '';
+				$completion_date = isset($_POST['completion_date']) ? trim($_POST['completion_date']) : '';
+				$amount_paid = isset($_POST['amount_paid']) ? trim($_POST['amount_paid']) : '';
+				$draft_no = isset($_POST['draft_no']) ? trim($_POST['draft_no']) : '';
+				$payment_date = isset($_POST['payment_date']) ? trim($_POST['payment_date']) : '';
+				$bank_name = isset($_POST['bank_name']) ? trim($_POST['bank_name']) : '';
+
+				/*te*/
+
+				
+
+				$txtMiddleName = isset($_POST['txtMiddleName']) ?  trim($_POST['txtMiddleName']) : '';
+				$txtLastName = isset($_POST['txtLastName']) ? trim($_POST['txtLastName']) : '';
+				$fullname = $txtFirstName." ".$txtMiddleName." ".$txtLastName;
+
+				$d = isset($_POST['cmbDay']) ? trim($_POST['cmbDay']) : '';
+				$m = isset($_POST['cmbMonth']) ? trim($_POST['cmbMonth']) : '';
+				$y = isset($_POST['cmbYear']) ? trim($_POST['cmbYear']) : '';
+				$dob = isset($_POST['hidDateFormat']) ? trim($_POST['hidDateFormat']) : '';
+				$dob = date("Y-m-d", strtotime($dob));
+				//$dob = $y.'-'.$m.'-'.$d;
+				/*echo $dob;
+				die();*/
+				$dbStatus = "";
+				$dbMessage = "";
+				$dbError = "";
+
+				$radiogender = isset($_POST['radiogender']) ? $_POST['radiogender'] : '';
+				$radioID = isset($_POST['radioID']) ? $_POST['radioID'] : '';
+				$radioJEE = isset($_POST['radioJEE']) ? $_POST['radioJEE'] : '';
+				$radioHostel = isset($_POST['radioHostel']) ? $_POST['radioHostel'] : '';
+				$radiomaritalstatus = isset($_POST['radiomaritalstatus']) ? $_POST['radiomaritalstatus'] : '';
+				$radioQuota = isset($_POST['radioQuota']) ? $_POST['radioQuota'] : '';
+				
+				$cmbidproof = isset($_POST['cmbidproof']) ? $_POST['cmbidproof'] : '';
+				$txtidproof = isset($_POST['txtidproof']) ? $_POST['txtidproof'] : '';
+				
+				$relevantinfo = isset($_POST['relevantinfo']) ? $_POST['relevantinfo'] : '';
+				$enclosuresdetails = isset($_POST['enclosuresdetails']) ? $_POST['enclosuresdetails'] : '';
+				
+				//echo $cmbidproof ; die();
+				$cmbReservedCategory = isset($_POST['cmbCommunity']) ? $_POST['cmbCommunity'] : '';
+				
+				$cmbNationality = isset($_POST['cmbNationality']) ? $_POST['cmbNationality'] : '';
+				$cmbCommunity = isset($_POST['cmbCommunity1']) ? $_POST['cmbCommunity1'] : '';
+				if($cmbReservedCategory == 'PH')
+				{
+					$cmbCommunity = 'YES';
+				}
+				$cmbrelationship = isset($_POST['cmbrelationship']) ? $_POST['cmbrelationship'] : '';
+				$radioMinority = isset($_POST['radioMinority']) ? $_POST['radioMinority'] : '';
+				$txtemail = isset($_POST['txtemail']) ? $_POST['txtemail'] : '';
+				$txtemail1 = isset($_POST['txtemail1']) ? $_POST['txtemail1'] : '';
+				$radiobelong = isset($_POST['radiobelong']) ? $_POST['radiobelong'] : '';
+				$txtOccupation = isset($_POST['txtOccupation']) ? $_POST['txtOccupation'] : '';
+				$txtIncome = isset($_POST['txtIncome']) ? $_POST['txtIncome'] : '';
+				$txtIndicate = isset($_POST['txtIndicate']) ? $_POST['txtIndicate'] : '';
+				$txtKnowabout = isset($_POST['txtKnowabout']) ? $_POST['txtKnowabout'] : '';
+				$radioPhysicallY  = isset($_POST['radioPhysicallY']) ? $_POST['radioPhysicallY'] : '';
+				$txtphtype  = isset($_POST['cmbPH']) ? $_POST['cmbPH'] : '';
+				
+				$txtOtherNationality = isset($_POST['txtOtherNationality']) ? trim($_POST['txtOtherNationality']) : '';
+				$txtOtherRelations = isset($_POST['txtOtherRelations']) ? trim($_POST['txtOtherRelations']) : '';
+				$txtMotherTongue = isset($_POST['txtMotherTongue']) ? trim($_POST['txtMotherTongue']) : '';
+				$cmbCategory = isset($_POST['cmbCategory']) ? $_POST['cmbCategory'] : '';
+				$cmbReligion = isset($_POST['cmbReligion']) ? $_POST['cmbReligion'] : '';
+				$txtUnivRegNo = isset($_POST['txtUnivRegNo']) ? $_POST['txtUnivRegNo'] : '';
+				//$cmbHighestQualification = isset($_POST['txtQualifyingDegree']) ? $_POST['txtQualifyingDegree'] : '';
+				$txtDiv2 = isset($_POST['txtDiv2']) ? $_POST['txtDiv2'] : '';
+				$txtGradingOth2 = isset($_POST['txtGradingOth2']) ? $_POST['txtGradingOth2'] : '';
+				$txtDiv1 = isset($_POST['txtDiv1']) ? $_POST['txtDiv1'] : '';
+				$txtGradingOth1 = isset($_POST['txtGradingOth1']) ? $_POST['txtGradingOth1'] : '';
+				$cmbPassStatus = isset($_POST['cmbPassStatus']) ? $_POST['cmbPassStatus'] : '';
+				$txtSubject1 = isset($_POST['txtSubject1']) ? $_POST['txtSubject1'] : '';
+				$txtSubject2 = isset($_POST['txtSubject2']) ? $_POST['txtSubject2'] : '';
+				$txtSubject3 = isset($_POST['txtSubject3']) ? $_POST['txtSubject3'] : '';
+				$txtSubject4 = isset($_POST['txtSubject4']) ? $_POST['txtSubject4'] : '';
+				$txtUnivName = isset($_POST['txtUnivName']) ? $_POST['txtUnivName'] : '';
+				$txtTotalMarks = isset($_POST['txtTotalMarks']) ? $_POST['txtTotalMarks'] : '';
+				$txtHonsTotalMarks = isset($_POST['txtHonsTotalMarks']) ? $_POST['txtHonsTotalMarks'] : '';
+				$txtHonoursSubject = isset($_POST['txtHonoursSubject']) ? $_POST['txtHonoursSubject'] : '';
+				$txtSecuredMarks = isset($_POST['txtSecuredMarks']) ? $_POST['txtSecuredMarks'] : '';
+				$txtHonsSecuredMarks = isset($_POST['txtHonsSecuredMarks']) ? $_POST['txtHonsSecuredMarks'] : '';
+				$radioDistinction = isset($_POST['radioDistinction']) ? $_POST['radioDistinction'] : '';
+				$radioCourseType = isset($_POST['radioCourseType']) ? $_POST['radioCourseType'] : '';
+				$cmbHighestQualification = isset($_POST['cmbHighestQualification']) ? trim($_POST['cmbHighestQualification']) : '';
+				$txtHonsDivision = isset($_POST['txtHonsDivision']) ?  trim($_POST['txtHonsDivision']) : '';
+				$radioMigrant = isset($_POST['radioMigrant']) ?  trim($_POST['radioMigrant']) : 'NO';
+				//Parent Information
+				$txtFatherName = isset($_POST['txtFatherName']) ?  trim($_POST['txtFatherName']) : '';
+				$txtFatherOccupation = isset($_POST['txtFatherOccupation']) ?  trim($_POST['txtFatherOccupation']) : '';
+				$txtMotherName = isset($_POST['txtMotherName']) ? trim($_POST['txtMotherName']) : '';
+				$txtMotherOccupation = isset($_POST['txtMotherOccupation']) ?  trim($_POST['txtMotherOccupation']) : '';
+				$txtGuardianName = isset($_POST['txtGuardianName']) ?  trim($_POST['txtGuardianName']) : '';
+				$txtGuardianOccupation = isset($_POST['txtGuardianOccupation']) ?  trim($_POST['txtGuardianOccupation']) : '';
+				//Address
+				//present
+				$txtPresentAddress = isset($_POST['txtPresentAddress']) ?  trim($_POST['txtPresentAddress']) : 'BBSR';
+				$txtPresentLocality = isset($_POST['txtPresentLocality']) ? trim($_POST['txtPresentLocality']) : '';
+				$txtPresentPost = isset($_POST['txtPresentPost']) ? trim($_POST['txtPresentPost']) : '';
+				$cmbPresentDist = isset($_POST['cmbPresentDist']) ?  trim($_POST['cmbPresentDist']) : '';
+				$txtPresentPin = isset($_POST['txtPresentPin']) ? trim($_POST['txtPresentPin']) : '761200';
+				$cmbPresentState = isset($_POST['cmbPresentState']) ? trim($_POST['cmbPresentState']) : '';
+				$txtPresentDistance = isset($_POST['txtPresentDistance']) ? trim($_POST['txtPresentDistance']) : '';
+
+				//if permanent is same as present
+				$chksameasresidential = isset($_POST['chksameasresidential']) ? $_POST['chksameasresidential']:'N';
+				$txtPermenentAddress = isset($_POST['hidPermenentAddress']) ? trim($_POST['hidPermenentAddress']) : '';
+				$txtPermenentLocality = isset($_POST['txtPermenentLocality']) ? trim($_POST['txtPermenentLocality']) : '';
+				$txtPermanentPost = isset($_POST['txtPermanentPost']) ? trim($_POST['txtPermanentPost']) : 'PKD';
+				$txtPermanentDist = isset($_POST['cmbPermanentDist']) ? trim($_POST['cmbPermanentDist']) : '';
+				$txtPermanentState = isset($_POST['cmbPermanentState']) ?  trim($_POST['cmbPermanentState']) : '';
+				$txtPermanentPin = isset($_POST['txtPermanentPin']) ? trim($_POST['txtPermanentPin']) : '761200';
+				$txtPermanentMobile = isset($_POST['txtPermanentMobile']) ? trim($_POST['txtPermanentMobile']) : '';
+				$txtUid = isset($_POST['txtUid']) ? trim($_POST['txtUid']) : '';
+				$empsuspended = isset($_POST['empsuspended']) ? trim($_POST['empsuspended']) : '';
+				$empsuspendedinfo = isset($_POST['empsuspendedinfo']) ? trim($_POST['empsuspendedinfo']) : '';
+				$empDisciplinary = isset($_POST['empDisciplinary']) ? trim($_POST['empDisciplinary']) : '';
+				$empDisciplinaryInfo = isset($_POST['empDisciplinaryInfo']) ? trim($_POST['empDisciplinaryInfo']) : '';
+				
+				
+				$technical_5_1 = isset($_POST['txtTechnical_5_1']) ? trim($_POST['txtTechnical_5_1']) : ''; //course
+				$technical_5_2 = isset($_POST['txtTechnical_5_2']) && $_POST['txtTechnical_5_2'] != '' ? trim($_POST['txtTechnical_5_2']) : 'NULL'; //institute
+				$technical_5_3 = isset($_POST['txtTechnical_5_3']) ? trim($_POST['txtTechnical_5_3']) : ''; //affiliation
+				$technical_5_4 = isset($_POST['txtTechnical_5_4']) ? trim($_POST['txtTechnical_5_4']) : ''; //duration
+				
+				$technical_6_1 = isset($_POST['txtTechnical_6_1']) ? trim($_POST['txtTechnical_6_1']) : ''; //course
+				$technical_6_2 = isset($_POST['txtTechnical_6_2']) && $_POST['txtTechnical_6_2'] != '' ? trim($_POST['txtTechnical_6_2']) : 'NULL'; //institute
+				$technical_6_3 = isset($_POST['txtTechnical_6_3']) ? trim($_POST['txtTechnical_6_3']) : ''; //affiliation
+				$technical_6_4 = isset($_POST['txtTechnical_6_4']) ? trim($_POST['txtTechnical_6_4']) : ''; //duration
+				
+				$technical_7_1 = isset($_POST['txtTechnical_7_1']) ? trim($_POST['txtTechnical_7_1']) : ''; //course
+				$technical_7_2 = isset($_POST['txtTechnical_7_2']) && $_POST['txtTechnical_7_2'] != '' ? trim($_POST['txtTechnical_7_2']) : 'NULL'; //institute
+				$technical_7_3 = isset($_POST['txtTechnical_7_3']) ? trim($_POST['txtTechnical_7_3']) : ''; //affiliation
+				$technical_7_4 = isset($_POST['txtTechnical_7_4']) ? trim($_POST['txtTechnical_7_4']) : ''; //duration
+				
+				
+				$txtExamName1 = isset($_POST['txtExamName1']) ? $_POST['txtExamName1'] : '';
+				$txtStream1 = isset($_POST['txtStream1']) ? $_POST['txtStream1'] : '';
+				$txtYearQual1 = isset($_POST['txtYearQual1']) ? $_POST['txtYearQual1'] : '';
+				$txtBoardOth1 = isset($_POST['txtBoardOth1']) ? $_POST['txtBoardOth1'] : '';
+				$txtSub1 = isset($_POST['txtSub1']) ? $_POST['txtSub1'] : '';
+				$txtCGPA1 = isset($_POST['txtCGPA1']) ? $_POST['txtCGPA1'] : '';
+				
+				$txtExamName2 = isset($_POST['txtExamName2']) ? $_POST['txtExamName2'] : '';
+				$txtStream2 = isset($_POST['txtStream2']) ? $_POST['txtStream2'] : '';
+				$txtYearQual2 = isset($_POST['txtYearQual2']) ? $_POST['txtYearQual2'] : '';
+				$txtBoardOth2 = isset($_POST['txtBoardOth2']) ? $_POST['txtBoardOth2'] : '';
+				$txtSub2 = isset($_POST['txtSub2']) ? $_POST['txtSub2'] : '';
+				$txtCGPA2 = isset($_POST['txtCGPA2']) ? $_POST['txtCGPA2'] : '';
+
+					
+				$txtApplicantEmail = isset($_POST['txtemailid']) ? trim($_POST['txtemailid']) : '';
+				/*echo $txtApplicantEmail;
+				die();*/
+				
+				$MothersName = isset($_POST['txtMotherName']) ? trim($_POST['txtMotherName']) : '';
+				$cmbHomeDist = isset($_POST['cmbHomeDist']) ? trim($_POST['cmbHomeDist']) : '';
+				$radioResident = isset($_POST['radioResident']) ? trim($_POST['radioResident']) : '';
+				$is_employed = isset($_POST['empGovt']) ? $_POST['empGovt'] : '';
+				$txtNameOfOffice = isset($_POST['txtNameOfOffice']) ? $_POST['txtNameOfOffice'] : '';
+				$txtDOJ = isset($_POST['txtDOJ']) ? $_POST['txtDOJ'] : '';
+				$txtNameOfPost = isset($_POST['txtNameOfPost']) ? trim($_POST['txtNameOfPost']) : '';
+				$txtDateOfDebar = isset($_POST['txtDateOfDebar']) ? trim($_POST['txtDateOfDebar']) : '';
+				$txtPeriodOfDebar = isset($_POST['txtPeriodOfDebar']) ? trim($_POST['txtPeriodOfDebar']) : '';
+				
+				$txtDOJ = date("Y-m-d", strtotime($txtDOJ));
+				$txtDateOfDebar = date("Y-m-d", strtotime($txtDateOfDebar));
+				/*ECHO $is_employed;
+				ECHO $txtNameOfOffice;
+				DIE();*/
+				$txtApplicantLandLine = isset($_POST['txtApplicantLandLine']) ?  trim($_POST['txtApplicantLandLine']) : '';
+				$txtApplicantMobile = isset($_POST['txtApplicantMobile']) ?  trim($_POST['txtApplicantMobile']) : '';
+				$txtOtherUniversity = isset($_POST['txtOtherUniversity']) ?  trim($_POST['txtOtherUniversity']) : '';
+				if($txtUnivName != 'OTH')
+				{
+					$txtOtherUniversity = '';
+				}
+				$txtOtherSubject = isset($_POST['txtOtherSubject']) ? trim($_POST['txtOtherSubject']) : '';
+				if($txtHonoursSubject != 'OTH')
+				{
+					$txtOtherSubject = '';
+				}
+				//Academic Details
+				$program_code = $this->session->userdata('admcode');
+				$program_code_arr = explode('_',$program_code);
+				$institute_code = $program_code_arr[1];
+				$reg_user_id = $this->session->userdata('reg_user_id');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$this->db->select("A.qualification_code, B.qualification_name, B.division");
+				$this->db->from('program_qualification_setup A');
+				$this->db->join('qualification_master B','A.qualification_code = B.qualification_code','inner');
+				$this->db->where('A.program_code',$program_code);
+				$this->db->where('A.record_status',1);
+				$this->db->order_by('A.id');
+				
+				
+				//print_r($query);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				//print_r($result);
+				$allQualifications = $result->result_array();
+				$slno = 1;
+				foreach($allQualifications as $row)
+				{
+					${'txtQualification'.$slno} = isset($_POST['txtQualification'.$slno]) && $_POST['txtQualification'.$slno] != '' ? $_POST['txtQualification'.$slno] : '';
+					${'txtYear'.$slno} = isset($_POST['txtYear'.$slno]) && trim($_POST['txtYear'.$slno]) != '' ? (int) trim($_POST['txtYear'.$slno]) : null;
+					${'txtBoard'.$slno} = isset($_POST['txtBoard'.$slno]) && $_POST['txtBoard'.$slno] != '' ? $_POST['txtBoard'.$slno] : '';
+					${'txtDivision'.$slno} = isset($_POST['txtDivision'.$slno]) && $_POST['txtDivision'.$slno] != '' ? $_POST['txtDivision'.$slno] : 'NULL';
+					${'txtMS'.$slno} = isset($_POST['txtMS'.$slno]) && $_POST['txtMS'.$slno] != '' ? $_POST['txtMS'.$slno] : '';
+					${'txtFM'.$slno} = isset($_POST['txtFM'.$slno]) && $_POST['txtFM'.$slno] != '' ? $_POST['txtFM'.$slno] : '';
+					${'txtPercent'.$slno} = isset($_POST['txtPercent'.$slno]) && $_POST['txtPercent'.$slno] != '' ? $_POST['txtPercent'.$slno] : null;
+					${'txtsubject'.$slno} = isset($_POST['txtsubject'.$slno]) && $_POST['txtsubject'.$slno] != '' ? $_POST['txtsubject'.$slno] : '';
+					${'txtdistinct'.$slno} = isset($_POST['txtdistinct'.$slno]) && $_POST['txtdistinct'.$slno] != '' ? $_POST['txtdistinct'.$slno] : null;
+					${'txtgrading'.$slno} = isset($_POST['txtgrading'.$slno]) && $_POST['txtgrading'.$slno] != '' ? $_POST['txtgrading'.$slno] : '';
+					${'txtqual2'.$slno} = isset($_POST['txtqual2'.$slno]) && $_POST['txtqual2'.$slno] != '' ? $_POST['txtqual2'.$slno] : '';
+					$slno++;
+					//echo $_POST['txtQualification'.$slno];
+				}
+				$txtQualification3 = isset($_POST['txtQualification3']) && $_POST['txtQualification3'] != '' ? $_POST['txtQualification3'] : '';
+				$txtYear3 = isset($_POST['txtYear3']) && trim($_POST['txtYear3']) != '' ? (int) trim($_POST['txtYear3']) : null;
+				$txtBoard3 = isset($_POST['txtBoard3']) && $_POST['txtBoard3'] != '' ? $_POST['txtBoard3'] : '';
+				$txtDivision3 = isset($_POST['txtDivision3']) && $_POST['txtDivision3'] != '' ? $_POST['txtDivision3'] : null;
+				$txtMS3 = isset($_POST['txtMS3']) && $_POST['txtMS3'] != '' ? $_POST['txtMS3'] : '';
+				$txtFM3 = isset($_POST['txtFM3']) && $_POST['txtFM3'] != '' ? $_POST['txtFM3'] : '';
+				$txtPercent3 = isset($_POST['txtPercent3']) && $_POST['txtPercent3'] != '' ? $_POST['txtPercent3'] : null;
+				//Entrance exam appeared
+				  
+				$txtQualification4 = isset($_POST['txtQualification4']) && $_POST['txtQualification4'] != '' ? $_POST['txtQualification4'] : '';
+				$txtYear4 = isset($_POST['txtYear4']) && trim($_POST['txtYear4']) != '' ? (int) trim($_POST['txtYear4']) : null;
+				$txtBoard4 = isset($_POST['txtBoard4']) && $_POST['txtBoard4'] != '' ? $_POST['txtBoard4'] : '';
+				$txtDivision4 = isset($_POST['txtDivision4']) && $_POST['txtDivision4'] != '' ? $_POST['txtDivision4'] : null;
+				$txtMS4 = isset($_POST['txtMS4']) && $_POST['txtMS4'] != '' ? $_POST['txtMS4'] : '';
+				$txtFM4 = isset($_POST['txtFM4']) && $_POST['txtFM4'] != '' ? $_POST['txtFM4'] : '';
+				$txtPercent4 = isset($_POST['txtPercent4']) && $_POST['txtPercent4'] != '' ? $_POST['txtPercent4'] : null;
+				$txtOther_grad = isset($_POST['txtOther_grad']) && $_POST['txtOther_grad'] != '' ? $_POST['txtOther_grad'] : '';
+				
+				$txtQualification5 = isset($_POST['txtQualification5']) && $_POST['txtQualification5'] != '' ? $_POST['txtQualification5'] : '';
+				$txtYear5 = isset($_POST['txtYear5']) && trim($_POST['txtYear5']) != '' ? (int) trim($_POST['txtYear5']) : null;
+				$txtBoard5 = isset($_POST['txtBoard5']) && $_POST['txtBoard5'] != '' ? $_POST['txtBoard5'] : '';
+				$txtDivision5 = isset($_POST['txtDivision5']) && $_POST['txtDivision5'] != '' ? $_POST['txtDivision5'] : null;
+				$txtMS5 = isset($_POST['txtMS5']) && $_POST['txtMS5'] != '' ? $_POST['txtMS5'] : '';
+				$txtFM5 = isset($_POST['txtFM5']) && $_POST['txtFM5'] != '' ? $_POST['txtFM5'] : '';
+				$txtPercent5 = isset($_POST['txtPercent5']) && $_POST['txtPercent5'] != '' ? $_POST['txtPercent5'] : null;
+				  
+				//
+				
+				$radioExam = isset($_POST['radioExam']) ? $_POST['radioExam'] : '';
+				$radioMarkSheet = isset($_POST['radioMarkSheet']) ? $_POST['radioMarkSheet'] : '';
+				$pay_mode = isset($_POST['mode']) ? $_POST['mode'] : '';
+				$radioGradCert = isset($_POST['radioGradCert']) ? $_POST['radioGradCert'] : 'No';
+				$radioGradMarkSheet = isset($_POST['radioGradMarkSheet']) ? $_POST['radioGradMarkSheet'] : 'No';
+				$hidDate = isset($_POST['hidDate']) ? $_POST['hidDate'] : '';
+				$txtExamMark = isset($_POST['txtExamMark']) && trim($_POST['txtExamMark']) != '' ? (float) trim($_POST['txtExamMark']) : 'NULL';
+				$txtfinalpercentage = isset($_POST['txtfinalpercentage']) && trim($_POST['txtfinalpercentage']) != '' ? (float) trim($_POST['txtfinalpercentage']) : 'NULL';
+				//$chkMAT = isset($_POST['chkMAT']) ? mysqli_real_escape_string($con, trim($_POST['chkMAT'])) : '';
+				//$chkIACR = isset($_POST['chkIACR']) ? mysqli_real_escape_string($con, trim($_POST['chkIACR'])) : '';
+				//$chkUU = isset($_POST['chkUU']) ? mysqli_real_escape_string($con, trim($_POST['chkUU'])) : '';
+
+				//declaration
+				$chkUndertaking1 = 1;
+				$chkUndertaking2 = 2;
+				$chkUndertaking3 = 3;
+				$declaration1 = "I declare that the particulars furnished in this form are true to the best of my knowledge and belief and as per my certificates and valid official documents. I further declare that in case any of the above information is found to be incorrect at any time, I shall be liable to forfeit my seat and to such penal action as the University may deem appropriate.";
+				$declaration2 = "I undertake to abide by the rules of the P.G. Council and P.G. Hostels, framed by the Berhampur University and if at any time, in any instance of breach of these rules, indiscipline, disobedience or misconduct or involvement in ragging is found against me, my name shall be struck off from the rolls of the University. ";
+				$declaration3 = "I have understood the various provisions and rules of eligibility and admission to various P.G. Departments of Berhampur University as mentioned in the Prospectus along with the application form and I undertake to abide by any decision taken by the University authorities in regard to my eligibility and admission into P.G. Departments.";
+				$chkApplicantUndertaking = isset($_POST['chkApplicantUndertaking']) ? mysqli_real_escape_string($con, trim($_POST['chkApplicantUndertaking'])) : '';
+				$now = date("Y-m-d H:i:s");
+				$this->db->save_queries = TRUE;
+				$this->db->select("count(*) AS cnt");
+				$this->db->from('applicant_appl_overview');
+				$this->db->where('applied_program',$program_code);
+				$this->db->where('reg_user_id',$reg_user_id);
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				echo "hiiiiiiiii";
+				die();*/
+				foreach($result->result_array() as $appl)
+				{
+					$count = $appl['cnt'];
+				}
+				if($count >= 1)
+				{
+					$this->session->set_userdata('mode', 'edit');
+				}
+				else
+				{
+					$this->session->set_userdata('mode', 'new');
+				}
+				$mode = $this->session->userdata('mode');
+				
+				
+				//echo $mode;die();
+				if($mode == 'edit')
+				{
+					$this->db->trans_start();
+					$dbstatus = TRUE;
+					$dbmessage = 'Data saved successfully';
+					$this->db->where('reg_user_id',$reg_user_id);
+					$this->db->where('applied_program',$program_code);
+					//print_r($applicant_master_update_array);die();
+					/*$update_applicant = $this->db->update('applicant_master',$applicant_master_update_array);
+					if(!$update_applicant){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error updating applicant_master';
+					}*/
+					$this->db->select("CASE WHEN comm_address_ref_id = perm_address_ref_id THEN 'Y' ELSE 'N' END AS addresscheck,comm_address_ref_id, perm_address_ref_id");
+					$this->db->from('applicant_master');
+					$this->db->where('applied_program',$program_code);
+					$this->db->where('reg_user_id',$reg_user_id);
+					$result = $this->db->get();
+					foreach($result->result_array() as $row)
+					{
+						$sameaspresent = $row['addresscheck'];
+						$comm_address_ref_id = $row['comm_address_ref_id'];
+						$perm_address_ref_id = $row['perm_address_ref_id'];
+						
+		
+					}
+					if($chksameasresidential == $sameaspresent && $chksameasresidential=='Y')
+					{
+						$applicant_address_array = array(
+							'address_1' => $txtPresentLocality,
+							'post_office' => $txtPresentPost,
+							'district_code' => $cmbPresentDist,
+							'state_code' => $cmbPresentState,
+							'pin' => $txtPresentPin,
+							'cand_name'=>$cand_name, 
+							'co_name'=>$co_name,
+							'city_name'=>$city_name, 
+							'institute_code'=>$institute_code, 
+							'mobile'=>$reg_user_id, 
+							'email_id'=>$txtemail, 
+							'updated_by' => $reg_user_id,
+							'updated_on' => $now 
+						);
+						$this->db->where('address_ref_id',$comm_address_ref_id);
+						$update_applicant_address = $this->db->update('applicant_address',$applicant_address_array);
+						if(!$update_applicant_address){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error updating applicant_address_all';
+						}
+					}
+					else if($chksameasresidential == $sameaspresent && $chksameasresidential=='N')
+					{
+						$applicant_address_array1 = array(
+							'address_1' => $txtPresentLocality,
+							'post_office' => $txtPresentPost,
+							'district_code' => $cmbPresentDist,
+							'state_code' => $cmbPresentState,
+							'pin' => $txtPresentPin,
+							'cand_name'=>$cand_name, 
+							'co_name'=>$co_name,
+							'city_name'=>$city_name, 
+							'mobile'=>$reg_user_id, 
+							'email_id'=>$txtemail, 
+							'updated_by' => $reg_user_id,
+							'updated_on' => $now
+						);
+						$this->db->where('address_ref_id',$comm_address_ref_id);
+						$update_applicant_address = $this->db->update('applicant_address',$applicant_address_array1);
+						if(!$update_applicant_address){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error updating applicant_address_present';
+						}
+						$applicant_address_array2 = array(
+							'address_1' => $txtPermenentLocality,
+							'post_office' => $txtPermanentPost,
+							'district_code' => $txtPermanentDist,
+							'state_code' => $txtPermanentState,
+							'pin' => $txtPermanentPin,
+							'email_id'=>$txtemail1, 
+							'cand_name'=>$cand_name1, 
+							'co_name'=>$co_name1, 
+							'city_name'=>$city_name1, 
+							'mobile'=>$phone_no1, 
+							'updated_by' => $reg_user_id,
+							'updated_on' => $now 
+						);
+						$this->db->where('address_ref_id',$perm_address_ref_id);
+						$update_applicant_address = $this->db->update('applicant_address',$applicant_address_array2);
+						if(!$update_applicant_address){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error updating applicant_address_permanent';
+						}
+						
+					}
+					else if($chksameasresidential != $sameaspresent && $chksameasresidential=='Y')
+					{
+						$applicant_address_array3 = array(
+							'address_1' => $txtPresentLocality,
+							'post_office' => $txtPresentPost,
+							'district_code' => $cmbPresentDist,
+							'state_code' => $cmbPresentState,
+							'pin' => $txtPresentPin,
+							'cand_name'=>$cand_name, 
+							'co_name'=>$co_name,
+							'city_name'=>$city_name, 
+							'mobile'=>$reg_user_id, 
+							'email_id'=>$txtemail, 
+							'updated_by' => $reg_user_id,
+							'updated_on' => $now 
+						);
+						$this->db->where('address_ref_id',$comm_address_ref_id);
+						$update_applicant = $this->db->update('applicant_address',$applicant_address_array3);
+						if(!$update_applicant){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error updating applicant_address_present';
+						}
+						$perm_address_ref_id=$comm_address_ref_id;
+					}
+					else if($chksameasresidential != $sameaspresent && $chksameasresidential=='N')
+					{
+						$applicant_address_array4 = array(
+							'address_1' => $txtPresentLocality,
+							'post_office' => $txtPresentPost,
+							'district_code' => $cmbPresentDist,
+							'state_code' => $cmbPresentState,
+							'pin' => $txtPresentPin,
+							'cand_name'=>$cand_name, 
+							'co_name'=>$co_name,
+							'city_name'=>$city_name, 
+							'mobile'=>$reg_user_id, 
+							'email_id'=>$txtemail, 
+							'updated_by' => $reg_user_id,
+							'updated_on' => $now 
+						);
+						$this->db->where('address_ref_id',$comm_address_ref_id);
+						$update_applicant = $this->db->update('applicant_address',$applicant_address_array4);
+						if(!$update_applicant){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error updating applicant_address_present';
+						}else{
+							$applicant_address_array2 = array(
+								'address_1' => $txtPermenentLocality,
+								'post_office' => $txtPermanentPost,
+								'district_code' => $txtPermanentDist,
+								'state_code' => $txtPermanentState,
+								'pin' => $txtPermanentPin,
+								'email_id'=>$txtemail1, 
+								'cand_name'=>$cand_name1, 
+								'co_name'=>$co_name1, 
+								'city_name'=>$city_name1, 
+								'mobile'=>$phone_no1, 
+								'updated_by' => $reg_user_id,
+								'updated_on' => $now 
+							);
+							$this->db->insert('applicant_address',$applicant_address_array2);
+							if($this->db->affected_rows() == 0)
+							{
+								$dbStatus = FALSE;
+								$dbMessage = 'Error inserting Applicant Permanent';
+							}
+							else
+								$perm_address_ref_id = $this->db->insert_id();
+							
+							
+						}
+					}
+				/*ECHO $dob;
+				DIE();*/
+					
+					$applicant_master_update_array = array(
+						'first_name' => $txtFirstName,
+						'mid_name' => $txtMiddleName,
+						'last_name' => $txtLastName,
+						'full_name' => $fullname,
+						'exam_center_code' => $center_name1,
+						'exam_center_code1' => $center_name2,
+						'exam_center_code2' => $center_name3,
+						'dob' => $dob,
+						'gender' => $radiogender,
+						'id_proof' => $cmbidproof,
+						'id_proof_number' => $txtidproof,
+						'jee_place' => $radioJEE,
+						'nationality' => $cmbNationality,
+						'cmbrelationship' => $cmbrelationship,
+						'adhar_no' => $txtUid,
+						'dob_in_word' => $hidDate,
+						'category' => $cmbReservedCategory,
+						'phtype'=>$txtphtype,
+						
+						'is_minority_community' => $radioMinority,
+						'is_passed' => $radioMarkSheet,
+						'payment_mode' => $pay_mode,
+						'grad_cert' => $radioGradCert,
+						'grad_mark_sheet' => $radioGradMarkSheet,
+						'minority_community_details' => $cmbCommunity,
+						
+						'is_north_east' => $radiobelong,
+						'father_occupation' => $txtOccupation,
+						'annual_parent_income' => $txtIncome,
+						'indicate_choice' => $txtIndicate,
+						'know_about_cipet' => $txtKnowabout,
+						'physically_challenged' => $radioPhysicallY ,
+						'is_suspended' => $empsuspended ,
+						'any_disciplinary_action' => $empDisciplinary ,
+						
+						'religion' => $cmbReligion,
+						'applicant_email' => $txtApplicantEmail,
+						'applicant_landline' => $txtApplicantLandLine,
+						'applicant_mobile' => $txtApplicantMobile,
+						'mother_tongue' => $txtMotherTongue, 
+						'hostel_facility' => $radioHostel,
+						'marital_status' => $radiomaritalstatus,
+						'is_reserved_quota' => $radioQuota,
+						'updated_by' => $reg_user_id,
+						'updated_on' => $now,
+						'master_name'=>$master_name,
+						'last_year_mark' => $txtfinalpercentage,
+						/*'center_name1'=>$center_name1,
+						'center_code1'=>$center_code1,
+						'center_name2'=>$center_name2,
+						'center_code2'=>$center_code2, 
+						'center_name3'=>$center_name3,
+						'center_code3'=>$center_code3,*/ 
+						
+						
+						'district_code'=>$cmbHomeDist, 
+						'ap_resident'=>$radioResident,
+						'is_employed'=>$is_employed,
+						'name_of_office'=>$txtNameOfOffice,
+						'govt_doj'=>$txtDOJ,
+						'name_of_post' => $txtNameOfPost,
+						'date_of_debar' => $txtDateOfDebar,
+						'period_of_debar' => $txtPeriodOfDebar,
+						
+						'father_occupation'=>$FathersProfession, 
+						'annual_parent_income'=>$FathersIncome,
+						'north_east_state'=>$cmbNorthState, 
+
+						'mothers_profession'=>$MothersProfession, 
+						'mothers_income'=>$MothersIncome,
+						'mothers_name'=>$txtMotherName,
+						'fathers_adhar_no'=>$fathers_adhar_no,
+						'mothers_adhar_no'=>$mothers_adhar_no,
+						'relevantinfo' => $relevantinfo,
+						'suspendedInfo' => $empsuspendedinfo,
+						'disciplinaryInfo' => $empDisciplinaryInfo,
+						'enclosuresdetails' => $enclosuresdetails,
+
+						'employer_add'=>$Employer_address,
+						'employer_from'=>$Employer_from,
+						'employer_to'=>$Employer_to,
+						'employer_add1'=>$Employer_address1, 
+						'employer_from1'=>$Employer_from1,
+						'employer_to1'=>$Employer_to1, 
+						'completion_date'=>$completion_date, 
+						'comm_address_ref_id'=>$comm_address_ref_id,
+						'perm_address_ref_id'=>$perm_address_ref_id, 
+						'exam_center_code'=>$cmbExamCenter 
+						);
+						$this->db->where('reg_user_id' , $reg_user_id);
+						$this->db->where('applied_program',$program_code);
+						$this->db->update('applicant_master',$applicant_master_update_array);
+						/*echo $this->db->last_query();
+						die();*/
+						if($this->db->affected_rows() == 0)
+						{
+							$dbStatus = FALSE;
+							$dbMessage = 'Error update Applicant Master';
+						}else{
+							$applicant_history_insert_array = array(
+								'reg_user_id' => $reg_user_id,
+								'applied_program' => $program_code,
+								'first_name' => $txtFirstName,
+								'mid_name' => $txtMiddleName,
+								'last_name' => $txtLastName,
+								'full_name' => $fullname,
+								'exam_center_code' => $center_name1,
+								'exam_center_code1' => $center_name2,
+								'exam_center_code2' => $center_name3,
+								'gender' => $radiogender,
+								'id_proof' => $cmbidproof,
+								'id_proof_number' => $txtidproof,
+								'jee_place' => $radioJEE,
+								'nationality' => $cmbNationality,
+								'cmbrelationship' => $cmbrelationship,
+								'dob' => $dob,
+								'adhar_no' => $txtUid,
+								'dob_in_word' => $hidDate,
+								'category' => $cmbReservedCategory,
+								'phtype'=>$txtphtype,
+								
+								'is_minority_community' => $radioMinority,
+								'is_passed' => $radioMarkSheet,
+								'payment_mode' => $pay_mode,
+								'grad_mark_sheet' => $radioGradMarkSheet,
+								'minority_community_details' => $cmbCommunity,
+								
+								'is_north_east' => $radiobelong,
+								'father_occupation' => $txtOccupation,
+								'annual_parent_income' => $txtIncome,
+								'indicate_choice' => $txtIndicate,
+								'know_about_cipet' => $txtKnowabout,
+								'physically_challenged' => $radioPhysicallY ,
+								'last_year_mark' => $txtfinalpercentage,
+								
+								'religion' => $cmbReligion,
+								'applicant_email' => $txtApplicantEmail,
+								'applicant_landline' => $txtApplicantLandLine,
+								'applicant_mobile' => $txtApplicantMobile,
+								'mother_tongue' => $txtMotherTongue, 
+								'hostel_facility' => $radioHostel,
+								'marital_status' => $radiomaritalstatus,
+								'is_reserved_quota' => $radioQuota,
+								'created_by' => $reg_user_id,
+								'created_on' => $now,
+								'master_name'=>$master_name,
+								/*'center_name1'=>$center_name1,
+								'center_code1'=>$center_code1,
+								'center_name2'=>$center_name2,
+								'center_code2'=>$center_code2, 
+								'center_name3'=>$center_name3,
+								'center_code3'=>$center_code3, */
+								'relevantinfo' => $relevantinfo,
+								'enclosuresdetails' => $enclosuresdetails,
+								'father_occupation'=>$FathersProfession, 
+							'annual_parent_income'=>$FathersIncome,
+							'north_east_state'=>$cmbNorthState, 
+							'mothers_profession'=>$MothersProfession, 
+							'mothers_income'=>$MothersIncome,
+							'mothers_name'=>$txtMotherName,
+							'fathers_adhar_no'=>$fathers_adhar_no,
+							'mothers_adhar_no'=>$mothers_adhar_no,
+
+								'is_employed'=>$employed,
+								'employer_add'=>$Employer_address,
+								'employer_from'=>$Employer_from,
+								'employer_to'=>$Employer_to,
+								'employer_add1'=>$Employer_address1, 
+								'employer_from1'=>$Employer_from1,
+								'employer_to1'=>$Employer_to1, 
+								'completion_date'=>$completion_date, 
+								'comm_address_ref_id'=>$comm_address_ref_id,
+								'perm_address_ref_id'=>$perm_address_ref_id  
+							);
+							$history_applicant = $this->db->insert('applicant_history',$applicant_history_insert_array);
+							if(!$history_applicant){
+								$dbStatus = FALSE;
+								$dbMessage = 'Error inserting applicant_history';
+							}
+						}
+					
+					
+					
+					$update_applicant_relation_1_array = array(
+						'rel_name' => $txtFatherName,
+						'updated_by' => $reg_user_id,
+						'updated_on' => $now 
+					);
+					$update_applicant_relation_2_array = array(
+						'rel_name' => $txtMotherName,
+						'updated_by' => $reg_user_id,
+						'updated_on' => $now 
+					);
+					$this->db->where('reg_user_id',$reg_user_id);
+					$this->db->where('applied_program',$program_code);
+					$this->db->where('applicant_rel_flag',1);
+					$update_applicant_relation1 = $this->db->update('applicant_relation',$update_applicant_relation_1_array);
+					if(!$update_applicant_relation1)
+					{
+						$dbstatus = FALSE;
+						$dbmessage = 'Error updating applicant_relation_1';
+					}
+					$this->db->where('reg_user_id',$reg_user_id);
+					$this->db->where('applied_program',$program_code);
+					$this->db->where('applicant_rel_flag',2);
+					$update_applicant_relation2 = $this->db->update('applicant_relation',$update_applicant_relation_2_array);
+					//echo $update_applicant_relation2;
+					//print_r($this->db);
+					//print_r($this->db->_error_message());
+					if(!$update_applicant_relation2)
+					{
+						$dbstatus = FALSE;
+						$dbmessage = 'Error updating applicant_relation_2';
+					}
+					$this->db->where('reg_user_id',$reg_user_id);
+					$this->db->where('applied_program',$program_code);
+					$update_applicant_relation2 = $this->db->delete('applicant_qualification_detail');
+					//echo $this->db->last_query();
+					if(!$update_applicant_relation2)
+					{
+						$dbstatus = FALSE;
+						$dbmessage = 'Error deleting applicant_qualification_detail';
+					}
+					
+					$slno = 1;
+					/*echo $txtQualification3;
+					die();*/
+					foreach($allQualifications as $row)
+					{
+						/*if(${'txtYear'.$slno} != 'NULL' )
+						{*/
+							$post_qualification = ${'txtQualification'.$slno};
+							//echo $post_qualification; 
+							 
+						//	$qualification = $row['$qualification']
+							$update_applicant_qualification_array = array(
+								'reg_user_id' => $reg_user_id,
+								'applied_program' => $program_code,
+								'qual_desc_1' => trim($post_qualification),
+								'year_of_passing' => ${'txtYear'.$slno},
+								'university_board' => ${'txtBoard'.$slno},
+								'mark_secured' => ${'txtMS'.$slno},
+								'full_mark' => ${'txtFM'.$slno},
+								'percentage_mark' => ${'txtPercent'.$slno},
+								'honours_subject' => ${'txtsubject'.$slno},
+								'division_distinction' => ${'txtdistinct'.$slno},
+								'grade' => ${'txtgrading'.$slno},
+								'qual_desc_2' => ${'txtqual2'.$slno},
+								'other_stream' => $txtOther_grad,
+								'created_by' => $reg_user_id,
+								'created_on' => $now
+							);
+							//print_r($update_applicant_qualification_array);
+							
+							$this->db->insert('applicant_qualification_detail',$update_applicant_qualification_array);
+							/*echo $this->db->last_query();
+							die();*/
+							$slno++;
+						/*}*/ 
+					}
+					
+					
+					$this->db->where('reg_user_id',$reg_user_id);
+					$this->db->where('applied_program',$program_code);
+					$update_applicant_technical_qualification_detail = $this->db->delete('applicant_technical_qualification_detail');
+					//echo $this->db->last_query();
+					if(!$update_applicant_technical_qualification_detail)
+					{
+						$dbstatus = FALSE;
+						$dbmessage = 'Error deleting applicant_technical_qualification_detail';
+					}
+					
+					//14. Technical qualifiation2
+					if($txtExamName1 !='')
+					{
+						$applicant_technical_qualification_detail = array(
+							'reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'qual_desc_1' => $txtExamName1,
+							'year' => $txtYearQual1,
+							'stream' => $txtStream1,
+							'affiliation_from' => $txtBoardOth1,
+							'subjects_offered' => $txtSub1,
+							'grade_cgpa' => $txtCGPA1,
+							'division' => $txtDiv1,
+							'remark' => $txtGradingOth1,
+							'sl_no' => '5',
+							'created_by' => $reg_user_id,
+							'created_on' => $now
+						);
+						$history_applicant = $this->db->insert('applicant_technical_qualification_detail',$applicant_technical_qualification_detail);
+						if(!$history_applicant){
+							$dbStatus = FALSE;
+							$dbMessage = 'ERROR updating Technical detail 5';
+						}
+						
+					}
+					//14. Technical qualifiation3
+					if($txtExamName2 !='')
+					{
+						$applicant_technical_qualification_detail = array(
+							'reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'qual_desc_1' => $txtExamName2,
+							'year' => $txtYearQual2,
+							'stream' => $txtStream2,
+							'affiliation_from' => $txtBoardOth2,
+							'subjects_offered' => $txtSub2,
+							'grade_cgpa' => $txtCGPA2,
+							'division' => $txtDiv2,
+							'remark' => $txtGradingOth2,
+							'sl_no' => '6',
+							'created_by' => $reg_user_id,
+							'created_on' => $now
+						);
+						$history_applicant = $this->db->insert('applicant_technical_qualification_detail',$applicant_technical_qualification_detail);
+						if(!$history_applicant){
+							$dbStatus = FALSE;
+							$dbMessage = 'ERROR updating Technical detail 6';
+						}
+					}
+					if($technical_7_1 !='')
+					{
+						$applicant_technical_qualification_detail = array(
+							'reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'qual_desc_1' => $technical_7_1,
+							'year' => $technical_7_2,
+							'institute_name' => $technical_7_3,
+							'sl_no' => '7',
+							'thesis' => $technical_7_4,
+							'created_by' => $reg_user_id,
+							'created_on' => $now
+						);
+						$history_applicant = $this->db->insert('applicant_technical_qualification_detail',$applicant_technical_qualification_detail);
+						if(!$history_applicant){
+							$dbStatus = FALSE;
+							$dbMessage = 'ERROR updating Technical detail 7';
+						}
+					}
+					
+					$this->db->where('reg_user_id',$reg_user_id);
+					$this->db->where('applied_program',$program_code);
+					$applicant_reference_detail = $this->db->delete('applicant_reference_detail');
+					
+					if(!$applicant_reference_detail)
+					{
+						$dbstatus = FALSE;
+						$dbmessage = 'Error deleting applicant_reference_detail';
+					}
+					
+					/*for($ref = 0 ;$ref< 2 ;$ref ++ ){
+						$update_applicant_reference_array = array(
+								'reg_user_id' => $reg_user_id,
+								'applied_program' => $program_code,
+								'referenced_by' => $_POST['refname'.$ref],
+								'sl_no' => $ref,
+								'contact_address' => $_POST['refaddress'.$ref],
+								'email_id' => $_POST['refemail'.$ref],
+								'mobile_number' => $_POST['refmobile'.$ref],
+								'created_by' => $reg_user_id,
+								'created_on' => $now
+						);
+						$this->db->insert('applicant_reference_detail',$update_applicant_reference_array);
+						
+						if($this->db->affected_rows() == 0)
+						{
+							$dbstatus = FALSE;
+							$dbmessage = 'Error updating applicant_reference_detail';
+						}
+					}*/
+					
+					$this->db->where('reg_user_id',$reg_user_id);
+					$this->db->where('applied_program',$program_code);
+					$applicant_research_experience_detaill = $this->db->delete('applicant_research_experience_detail');
+					
+					if(!$applicant_research_experience_detaill)
+					{
+						$dbstatus = FALSE;
+						$dbmessage = 'Error deleting applicant_research_experience_detail';
+					}
+					
+					//$insert_research_data=array();
+					for($i=0;$i < sizeof($_POST['txtorganization']);$i++){
+						if($_POST['txtorganization'][$i]!=''){
+							
+							//echo $_POST['txtdate_from'][$i];
+							$from_date=date_create($_POST['txtdate_from'][$i]);
+							$to_date=date_create($_POST['txtdate_to'][$i]);
+							//echo date_format($from_date,"Y-m-d");
+							//die();
+							
+							$insert_research_data=
+							array("reg_user_id" => $reg_user_id,
+								"applied_program" => $program_code,
+								"sl_no"=>$i+1,
+								"organization"=>$_POST['txtorganization'][$i],
+								"post_held"=>$_POST['txtpost_held'][$i],
+								"date_from"=>date_format($from_date,"Y-m-d"),
+								"date_to"=> date_format($to_date,"Y-m-d"),
+								"nature_of_job"=>$_POST['txtnature_of_job'][$i],
+								"pay_band"=>$_POST['txtpay_band'][$i],
+								"basic_pay"=>$_POST['txtbasic_pay'][$i],
+								"created_by"=>$reg_user_id,
+								"created_on"=>$now);
+								$this->db->insert('applicant_research_experience_detail',$insert_research_data);
+								if($this->db->affected_rows() == 0)
+								{
+									$dbstatus = FALSE;
+									$dbmessage = 'Error updating applicant_research_experience_detail';
+								}
+						}
+					}
+					
+					
+						
+						if($dbstatus == TRUE)
+						{
+							$this->db->select("appl_no");
+							$this->db->from('applicant_appl_overview');
+							$this->db->where('applied_program',$program_code);
+							$this->db->where('reg_user_id',$reg_user_id);
+							$result = $this->db->get();
+							foreach($result->result_array() as $appl)
+							{
+								$appl_no = $appl['appl_no'];
+								$document_list_array = array(
+									'record_status'=>0
+								);
+								$this->db->where('application_no',$appl_no);
+								$update_applicant_relation2 = $this->db->update('applicant_document_list',$document_list_array);
+								if(!$update_applicant_relation2)
+								{
+									$dbstatus = FALSE;
+									$dbmessage = 'Error updating applicant_document_list';
+								}
+								
+							}
+							$this->db->select("document_type_code");
+							$this->db->from('program_document_setup');
+							$this->db->where('program_code',$program_code);
+							$this->db->where('record_status',1);
+							$result = $this->db->get();
+							$documentsReq = $result->result_array();
+							if($cmbReservedCategory == 'GEN' || $cmbReservedCategory == 'OBC' || $cmbReservedCategory == 'PH' ){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'CASTE');
+							}
+							if($radiobelong == 'NO'){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'DOMICILE');
+							}
+							if($radioPhysicallY == 'NO' || $cmbReservedCategory != 'PH'){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'PHC');
+							}
+							if($radioGradCert == 'No'  || $radioMarkSheet == 'No'){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'HQC');
+							}
+							if($radioGradMarkSheet == 'No' || $radioMarkSheet == 'No'){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'HDMS');
+							}
+							if($radioID == 'No'){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'DL');
+							}
+							if($employed == 'NO'){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'NOC');
+							}
+							if($pay_mode == 'Online'){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'CHALLAN');
+							}
+							if($cmbNationality == 'OTH'){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'CASTE');
+							}
+							if($is_employed == 'NO'){
+								$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'EXPCERT');
+							}
+							foreach($documentsReq AS $row1)
+							{
+								$document_list_array = array(
+									'record_status'=>1
+								);
+								$document_list_insert_array = array(
+									'record_status'=>1,
+									'application_no'=>$appl_no,
+									'document_type_code'=>$row1['document_type_code']
+								);
+								$this->db->select("application_no");
+								$this->db->from('applicant_document_list');
+								$this->db->where('application_no',$appl_no);
+								$this->db->where('document_type_code',$row1['document_type_code']);
+								$result = $this->db->get();
+								$documentsReq = $result->result_array();
+								if($result->num_rows() == 1)
+								{
+									$this->db->where('application_no',$appl_no);
+									$this->db->where('document_type_code',$row1['document_type_code']);
+									$update_applicant_relation2 = $this->db->update('applicant_document_list',$document_list_array);
+									if(!$update_applicant_relation2)
+									{
+										$dbstatus = FALSE;
+										$dbmessage = 'Error updating applicant_document_list';
+									}
+								}
+								else
+								{
+									$this->db->insert('applicant_document_list',$document_list_insert_array);
+									if(!$update_applicant_relation2)
+									{
+										$dbstatus = FALSE;
+										$dbmessage = 'Error updating applicant_document_list';
+									}
+								}
+							}
+							if($dbstatus == TRUE)
+							{
+								$this->db->select("A.template_code,B.file_name,B.template_name");
+								$this->db->from('program_master A');
+								$this->db->join('form_template_master B','A.template_code = B.template_code','inner');
+								$this->db->where('A.program_code',$program_code);
+								$result = $this->db->get();
+								//echo $this->db->last_query();
+								$output_data = $result->result_array();
+								$output = array("aaData" => array());
+								foreach ($output_data as $row) 
+					            {
+					                $file_name = $row['file_name'];
+									$temp_code = $row['template_code'];
+									$temp_name = explode(".",$file_name);
+									$print_function = $temp_name[0]."_pdf";
+					            }
+					            
+								if($appl_status == 'Verified')
+								{
+									$controllerInstance = & get_instance();
+									$return = $controllerInstance->$print_function();
+									if($return == true)
+									{
+										if(file_exists(DOCUMENT_UPLOAD_URL.'/DOCUMENTS/'.$program_code.'/'.$application_no.'/application_print.pdf'))
+										{
+											$this->db->trans_complete();
+											$this->session->set_userdata('admcode', $program_code);
+											$this->session->set_userdata('reg_user_id', $reg_user_id);
+											$this->session->set_userdata('appl_no', $appl_no);
+											$this->session->set_userdata('mode', $mode);
+											$this->session->set_userdata('step', 3);
+											if( $this->db->trans_status() === FALSE){
+												$dbstatus = FALSE;
+												$dbmessage = 'Error While Saving';
+											}
+										}
+									}
+								}
+								else
+								{
+									$this->db->trans_complete();
+									$this->session->set_userdata('admcode', $program_code);
+									$this->session->set_userdata('reg_user_id', $reg_user_id);
+									$this->session->set_userdata('appl_no', $appl_no);
+									$this->session->set_userdata('mode', $mode);
+									$this->session->set_userdata('step', 3);
+									if( $this->db->trans_status() === FALSE){
+										$dbstatus = FALSE;
+										$dbmessage = 'Error While Saving';
+									}
+								}
+								
+								
+								return array('status' => $dbstatus, 'msg' => $dbmessage);
+							}
+							else
+							{
+								$this->db->trans_rollback();
+							}
+						}
+						else
+						{
+							$this->db->trans_rollback();
+						}
+						
+					}
+					
+					
+				
+	
+				else
+				{
+					$this->db->trans_start();
+					$dbStatus = TRUE;
+					$dbmessage = 'Data saved Successfully';
+					$comm_address_ref_id = '';
+					if($chksameasresidential == 'Y')
+					{
+						$applicant_address_array1 = array(
+							'address_1' => $txtPresentLocality,
+							'post_office' => $txtPresentPost,
+							'district_code' => $cmbPresentDist,
+							'state_code' => $cmbPresentState,
+							'pin' => $txtPresentPin,
+							'cand_name'=>$cand_name, 
+							'co_name'=>$co_name,
+							'city_name'=>$city_name, 
+							'mobile'=>$reg_user_id, 
+							'email_id'=>$txtemail, 
+							'created_by' => $reg_user_id,
+							'distance_from' => $txtPresentDistance,
+							'created_on' => $now 
+						);
+						$this->db->insert('applicant_address',$applicant_address_array1);
+						/*echo $this->db->last_query();
+						die();*/
+						if($this->db->affected_rows() == 0)
+						{
+							$dbStatus = FALSE;
+							$dbmessage = 'Error inserting Applicant same address';
+						}
+						else
+							$comm_address_ref_id = $this->db->insert_id();
+						
+							
+							$applicant_master_insert_array = array(
+							'reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'first_name' => $txtFirstName,
+							'mid_name' => $txtMiddleName,
+							'last_name' => $txtLastName,
+							'full_name' => $fullname,
+							'exam_center_code' => $center_name1,
+							'dob' => $dob,
+							'exam_center_code1' => $center_name2,
+							'exam_center_code2' => $center_name3,
+							'gender' => $radiogender,
+							'id_proof' => $cmbidproof,
+							'id_proof_number' => $txtidproof,
+							'relevantinfo' => $relevantinfo,
+							'suspendedInfo' => $empsuspendedinfo,
+							'disciplinaryInfo' => $empDisciplinaryInfo,
+							'enclosuresdetails' => $enclosuresdetails,
+							
+							'jee_place' => $radioJEE,
+							'nationality' => $cmbNationality,
+							'adhar_no' => $txtUid,
+							'dob_in_word' => $hidDate,
+							'category' => $cmbReservedCategory,
+							'phtype'=>$txtphtype,
+							'religion' => $cmbReligion,
+							'applicant_email' => $txtApplicantEmail,
+							'applicant_landline' => $txtApplicantLandLine,
+							'applicant_mobile' => $txtApplicantMobile,
+							'mother_tongue' => $txtMotherTongue, 
+							'hostel_facility' => $radioHostel,
+							'marital_status' => $radiomaritalstatus,
+							'is_reserved_quota' => $radioQuota,
+							'last_year_mark' => $txtfinalpercentage,
+							
+							
+							
+							'home_district_code'=>$cmbHomeDist, 
+							'ap_resident'=>$radioResident,
+							'is_employed'=>$is_employed,
+							'name_of_office'=>$txtNameOfOffice,
+							'govt_doj'=>$txtDOJ,
+							'name_of_post' => $txtNameOfPost,
+							'date_of_debar' => $txtDateOfDebar,
+							'period_of_debar' => $txtPeriodOfDebar,
+							
+							
+							'is_minority_community' => $radioMinority,
+							'is_passed' => $radioMarkSheet,
+							'payment_mode' => $pay_mode,
+							'grad_cert' => $radioGradCert,
+							'grad_mark_sheet' => $radioGradMarkSheet,
+							'minority_community_details' => $cmbCommunity,
+							'is_north_east' => $radiobelong,
+							'father_occupation' => $txtOccupation,
+							'annual_parent_income' => $txtIncome,
+							'indicate_choice' => $txtIndicate,
+							'know_about_cipet' => $txtKnowabout,
+							'physically_challenged' => $radioPhysicallY ,
+							'is_suspended' => $empsuspended ,
+							'any_disciplinary_action' => $empDisciplinary ,
+							
+							'created_by' => $reg_user_id,
+							'created_on' => $now,
+							'comm_address_ref_id'=>$comm_address_ref_id,
+							'perm_address_ref_id'=>$comm_address_ref_id,
+							'master_name'=>$master_name,
+							
+							'is_employed'=>$employed,
+							'employer_add'=>$Employer_address,
+							'employer_from'=>$Employer_from,
+							'employer_to'=>$Employer_to,
+							'employer_add1'=>$Employer_address1, 
+							'employer_from1'=>$Employer_from1,
+							'employer_to1'=>$Employer_to1, 
+
+							'father_occupation'=>$FathersProfession, 
+							'annual_parent_income'=>$FathersIncome,
+							'north_east_state'=>$cmbNorthState, 
+
+							'mothers_profession'=>$MothersProfession, 
+							'mothers_income'=>$MothersIncome,
+							'mothers_name'=>$txtMotherName,
+							'fathers_adhar_no'=>$fathers_adhar_no,
+							'mothers_adhar_no'=>$mothers_adhar_no,
+							
+							'completion_date'=>$completion_date,  
+							'exam_center_code'=>$cmbExamCenter 
+							);
+						$this->db->insert('applicant_master',$applicant_master_insert_array);
+						
+						if($this->db->affected_rows() == 0)
+						{
+							$dbStatus = FALSE;
+							$dbmessage = 'Error inserting Applicant same address';
+						}
+						
+						$applicant_history_insert_array=array('reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'first_name' => $txtFirstName,
+							'mid_name' => $txtMiddleName,
+							'last_name' => $txtLastName,
+							'full_name' => $fullname,
+							'exam_center_code' => $center_name1,
+							'exam_center_code1' => $center_name2,
+							'exam_center_code2' => $center_name3,
+							'gender' => $radiogender,
+							'id_proof' => $cmbidproof,
+							'id_proof_number' => $txtidproof,
+							'relevantinfo' => $relevantinfo,
+							'enclosuresdetails' => $enclosuresdetails,
+							
+							'jee_place' => $radioJEE,
+							'nationality' => $cmbNationality,
+							'dob' => $dob,
+							'adhar_no' => $txtUid,
+							'dob_in_word' => $hidDate,
+							'category' => $cmbReservedCategory,
+							'phtype'=>$txtphtype,
+							'religion' => $cmbReligion,
+							'applicant_email' => $txtApplicantEmail,
+							'applicant_landline' => $txtApplicantLandLine,
+							'applicant_mobile' => $txtApplicantMobile,
+							'mother_tongue' => $txtMotherTongue, 
+							'hostel_facility' => $radioHostel,
+							'marital_status' => $radiomaritalstatus,
+							'is_reserved_quota' => $radioQuota,
+							'last_year_mark' => $txtfinalpercentage,
+							
+							'is_minority_community' => $radioMinority,
+							'is_passed' => $radioMarkSheet,
+							'payment_mode' => $pay_mode,
+							'grad_cert' => $radioGradCert,
+							'grad_mark_sheet' => $radioGradMarkSheet,
+							'minority_community_details' => $cmbCommunity,
+							'is_north_east' => $radiobelong,
+							'father_occupation' => $txtOccupation,
+							'annual_parent_income' => $txtIncome,
+							'indicate_choice' => $txtIndicate,
+							'know_about_cipet' => $txtKnowabout,
+							'physically_challenged' => $radioPhysicallY ,
+							
+							'created_by' => $reg_user_id,
+							'created_on' => $now,
+							'comm_address_ref_id'=>$comm_address_ref_id,
+							'perm_address_ref_id'=>$comm_address_ref_id,
+							'master_name'=>$master_name,
+							
+							'is_employed'=>$employed,
+							'employer_add'=>$Employer_address,
+							'employer_from'=>$Employer_from,
+							'employer_to'=>$Employer_to,
+							'employer_add1'=>$Employer_address1, 
+							'employer_from1'=>$Employer_from1,
+							'employer_to1'=>$Employer_to1, 
+
+							'father_occupation'=>$FathersProfession, 
+							'annual_parent_income'=>$FathersIncome,
+							'north_east_state'=>$cmbNorthState, 
+
+							'mothers_profession'=>$MothersProfession, 
+							'mothers_income'=>$MothersIncome,
+							'mothers_name'=>$txtMotherName,
+							'fathers_adhar_no'=>$fathers_adhar_no,
+							'mothers_adhar_no'=>$mothers_adhar_no,
+							
+							'completion_date'=>$completion_date );
+						$this->db->insert('applicant_history',$applicant_history_insert_array);
+						if($this->db->affected_rows() == 0)
+						{
+							$dbStatus = FALSE;
+							$dbmessage = 'Error inserting Applicant history same address';
+						}
+						
+						
+					}
+					else
+					{
+						$applicant_address_array1 = array(
+							'address_1' => $txtPresentLocality,
+							'post_office' => $txtPresentPost,
+							'district_code' => $cmbPresentDist,
+							'state_code' => $cmbPresentState,
+							'pin' => $txtPresentPin,
+							'cand_name'=>$cand_name, 
+							'co_name'=>$co_name,
+							'city_name'=>$city_name,
+							'mobile'=>$reg_user_id, 
+							'email_id'=>$txtemail, 
+							'created_by' => $reg_user_id,
+							
+							'created_on' => $now 
+						);
+						$this->db->insert('applicant_address',$applicant_address_array1);
+						if($this->db->affected_rows() == 0)
+						{
+							$dbStatus = FALSE;
+							$dbMessage = 'Error inserting Applicant Present';
+						}
+						else
+							$comm_address_ref_id = $this->db->insert_id();
+							
+							$applicant_address_array2 = array(
+								'address_1' => $txtPermenentLocality,
+								'post_office' => $txtPermanentPost,
+								'district_code' => $txtPermanentDist,
+								'state_code' => $txtPermanentState,
+								'pin' => $txtPermanentPin, 
+								'email_id'=>$txtemail1, 
+								'cand_name'=>$cand_name1, 
+								'co_name'=>$co_name1, 
+								'city_name'=>$city_name1, 
+								'mobile'=>$phone_no1, 
+								'created_by' => $reg_user_id,
+								'created_on' => $now 
+							);//print_r($applicant_address_array2);die();
+						$this->db->insert('applicant_address',$applicant_address_array2);
+						if($this->db->affected_rows() == 0)
+						{
+							$dbStatus = FALSE;
+							$dbMessage = 'Error inserting Applicant Permanent';
+						}
+						else
+							$perm_address_ref_id = $this->db->insert_id();
+						
+						$applicant_master_insert_array = array(
+							'reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'first_name' => $txtFirstName,
+							'mid_name' => $txtMiddleName,
+							'last_name' => $txtLastName,
+							'full_name' => $fullname,
+							'exam_center_code' => $center_name1,
+							'exam_center_code1' => $center_name2,
+							'exam_center_code2' => $center_name3,
+							'gender' => $radiogender,
+							'id_proof' => $cmbidproof,
+							'id_proof_number' => $txtidproof,
+							'jee_place' => $radioJEE,
+							'nationality' => $cmbNationality,
+							'dob' => $dob,
+							'adhar_no' => $txtUid,
+							'dob_in_word' => $hidDate,
+							'category' => $cmbReservedCategory,
+							'phtype'=>$txtphtype,
+							'religion' => $cmbReligion,
+							'applicant_email' => $txtApplicantEmail,
+							'applicant_landline' => $txtApplicantLandLine,
+							'applicant_mobile' => $txtApplicantMobile,
+							'mother_tongue' => $txtMotherTongue, 
+							'hostel_facility' => $radioHostel,
+							'marital_status' => $radiomaritalstatus,
+							'is_reserved_quota' => $radioQuota,
+							'created_by' => $reg_user_id,
+							'created_on' => $now,
+							'last_year_mark' => $txtfinalpercentage,
+							
+							'is_minority_community' => $radioMinority,
+							'is_passed' => $radioMarkSheet,
+							'payment_mode' => $pay_mode,
+							'grad_cert' => $radioGradCert,
+							 'grad_mark_sheet' => $radioGradMarkSheet,
+							'minority_community_details' => $cmbCommunity,
+							'is_north_east' => $radiobelong,
+							'father_occupation' => $txtOccupation,
+							'annual_parent_income' => $txtIncome,
+							'indicate_choice' => $txtIndicate,
+							'know_about_cipet' => $txtKnowabout,
+							'physically_challenged' => $radioPhysicallY ,
+							'is_suspended' => $empsuspended ,
+							'any_disciplinary_action' => $empDisciplinary ,
+							
+							
+						
+							'home_district_code'=>$cmbHomeDist, 
+							'ap_resident'=>$radioResident,
+							'is_employed'=>$is_employed,
+							'name_of_office'=>$txtNameOfOffice,
+							'govt_doj'=>$txtDOJ,
+							'name_of_post' => $txtNameOfPost,
+							'date_of_debar' => $txtDateOfDebar,
+							'period_of_debar' => $txtPeriodOfDebar,
+						
+							
+							'comm_address_ref_id'=>$comm_address_ref_id,
+							'perm_address_ref_id'=>$perm_address_ref_id,
+							'master_name'=>$master_name,
+						
+							'is_employed'=>$employed,
+							'employer_add'=>$Employer_address,
+							'employer_from'=>$Employer_from,
+							'employer_to'=>$Employer_to,
+							'employer_add1'=>$Employer_address1, 
+							'employer_from1'=>$Employer_from1,
+							'employer_to1'=>$Employer_to1, 
+							'relevantinfo' => $relevantinfo,
+							'suspendedInfo' => $empsuspendedinfo,
+							'disciplinaryInfo' => $empDisciplinaryInfo,
+							'enclosuresdetails' => $enclosuresdetails,
+							
+
+							'father_occupation'=>$FathersProfession, 
+							'annual_parent_income'=>$FathersIncome,
+							'north_east_state'=>$cmbNorthState, 
+
+							'mothers_profession'=>$MothersProfession, 
+							'mothers_income'=>$MothersIncome,
+							'mothers_name'=>$txtMotherName,
+							'fathers_adhar_no'=>$fathers_adhar_no,
+							'mothers_adhar_no'=>$mothers_adhar_no,
+
+							'completion_date'=>$completion_date, 
+							'exam_center_code'=>$cmbExamCenter  
+						);
+						$this->db->insert('applicant_master',$applicant_master_insert_array);
+						if($this->db->affected_rows() == 0)
+						{
+							$dbStatus = FALSE;
+							$dbMessage = 'Error inserting Applicant same address';
+						}
+						$applicant_history_insert_array=array(
+							'reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'first_name' => $txtFirstName,
+							'mid_name' => $txtMiddleName,
+							'last_name' => $txtLastName,
+							'full_name' => $fullname,
+							'exam_center_code' => $center_name1,
+							'exam_center_code1' => $center_name2,
+							'exam_center_code2' => $center_name3,
+							'gender' => $radiogender,
+							'id_proof' => $cmbidproof,
+							'id_proof_number' => $txtidproof,
+							'jee_place' => $radioJEE,
+							'nationality' => $cmbNationality,
+							'dob' => $dob,
+							'adhar_no' => $txtUid,
+							'dob_in_word' => $hidDate,
+							'category' => $cmbReservedCategory,
+							'phtype'=>$txtphtype,
+							'religion' => $cmbReligion,
+							'applicant_email' => $txtApplicantEmail,
+							'applicant_landline' => $txtApplicantLandLine,
+							'applicant_mobile' => $txtApplicantMobile,
+							'mother_tongue' => $txtMotherTongue, 
+							'hostel_facility' => $radioHostel,
+							'marital_status' => $radiomaritalstatus,
+							'is_reserved_quota' => $radioQuota,
+							'created_by' => $reg_user_id,
+							'created_on' => $now,
+							'last_year_mark' => $txtfinalpercentage,
+							
+							'is_minority_community' => $radioMinority,
+							'is_passed' => $radioMarkSheet,
+							'payment_mode' => $pay_mode,
+							'grad_cert' => $radioGradCert,
+							 'grad_mark_sheet' => $radioGradMarkSheet,
+							'minority_community_details' => $cmbCommunity,
+							'is_north_east' => $radiobelong,
+							'father_occupation' => $txtOccupation,
+							'annual_parent_income' => $txtIncome,
+							'indicate_choice' => $txtIndicate,
+							'know_about_cipet' => $txtKnowabout,
+							'physically_challenged' => $radioPhysicallY ,
+							
+							'comm_address_ref_id'=>$comm_address_ref_id,
+							'perm_address_ref_id'=>$perm_address_ref_id,
+							'master_name'=>$master_name,
+						
+							'is_employed'=>$employed,
+							'employer_add'=>$Employer_address,
+							'employer_from'=>$Employer_from,
+							'employer_to'=>$Employer_to,
+							'employer_add1'=>$Employer_address1, 
+							'employer_from1'=>$Employer_from1,
+							'employer_to1'=>$Employer_to1, 
+							'relevantinfo' => $relevantinfo,
+							'enclosuresdetails' => $enclosuresdetails,
+							
+
+							'father_occupation'=>$FathersProfession, 
+							'annual_parent_income'=>$FathersIncome,
+							'north_east_state'=>$cmbNorthState, 
+
+							'mothers_profession'=>$MothersProfession, 
+							'mothers_income'=>$MothersIncome,
+							'mothers_name'=>$txtMotherName,
+							'fathers_adhar_no'=>$fathers_adhar_no,
+							'mothers_adhar_no'=>$mothers_adhar_no,
+
+							'completion_date'=>$completion_date 
+						);
+						$this->db->insert('applicant_history',$applicant_history_insert_array);
+						if($this->db->affected_rows() == 0)
+						{
+							$dbStatus = FALSE;
+							$dbMessage = 'Error inserting Applicant history different address';
+						}
+						
+					}
+					$update_applicant_relation_1_array = array(
+						'reg_user_id' => $reg_user_id,
+						'applied_program' => $program_code,
+						'applicant_rel_flag' => 1,
+						'rel_name' => $txtFatherName,
+						'created_by' => $reg_user_id,
+						'created_on' => $now 
+					);
+					$update_applicant_relation_2_array = array(
+						'reg_user_id' => $reg_user_id,
+						'applied_program' => $program_code,
+						'applicant_rel_flag' => 2,
+						'rel_name' => $txtMotherName,
+						'updated_by' => $reg_user_id,
+						'updated_on' => $now 
+					);
+					$update_applicant_relation1 = $this->db->insert('applicant_relation',$update_applicant_relation_1_array);
+					if($this->db->affected_rows() == 0)
+					{
+						$dbstatus = FALSE;
+						$dbmessage = 'Error updating applicant_relation_1';
+					}
+					$update_applicant_relation2 = $this->db->insert('applicant_relation',$update_applicant_relation_2_array);
+					if($this->db->affected_rows() == 0)
+					{
+						$dbstatus = FALSE;
+						$dbmessage = 'Error updating applicant_relation_2';
+					}
+					
+					
+					$slno = 1;
+					//print_r($allQualifications); 
+					$slno = 1;
+					
+					
+					
+					
+					
+					foreach($allQualifications as $row)
+					{
+						/*if(${'txtYear'.$slno} != 'NULL' )
+						{*/
+							$post_qualification = ${'txtQualification'.$slno};
+							//echo $post_qualification; 
+							 
+						//	$qualification = $row['$qualification']
+							$update_applicant_qualification_array = array(
+								'reg_user_id' => $reg_user_id,
+								'applied_program' => $program_code,
+								'qual_desc_1' => trim($post_qualification),
+								'year_of_passing' => ${'txtYear'.$slno},
+								'university_board' => ${'txtBoard'.$slno},
+								'mark_secured' => ${'txtMS'.$slno},
+								'full_mark' => ${'txtFM'.$slno},
+								'percentage_mark' => ${'txtPercent'.$slno},
+								'honours_subject' => ${'txtsubject'.$slno},
+								'division_distinction' => ${'txtdistinct'.$slno},
+								'grade' => ${'txtgrading'.$slno},
+								'qual_desc_2' => ${'txtqual2'.$slno},
+								'other_stream' => $txtOther_grad,
+								'created_by' => $reg_user_id,
+								'created_on' => $now
+							);
+							//print_r($update_applicant_qualification_array);
+							
+							$this->db->insert('applicant_qualification_detail',$update_applicant_qualification_array);
+							/*echo $this->db->last_query();
+							die();*/
+							$slno++;
+						/*} */
+						
+					}
+					
+					//14. Technical qualifiation2
+					if($technical_5_1 !='')
+					{
+						$applicant_technical_qualification_detail = array(
+							'reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'qual_desc_1' => $technical_5_1,
+							'year' => $technical_5_2,
+							'institute_name' => $technical_5_3,
+							'thesis' => $technical_5_4,
+							'sl_no' => '5',
+							'created_by' => $reg_user_id,
+							'created_on' => $now
+						);
+						$history_applicant = $this->db->insert('applicant_technical_qualification_detail',$applicant_technical_qualification_detail);
+						if(!$history_applicant){
+							$dbStatus = FALSE;
+							$dbMessage = 'ERROR updating Technical detail 5';
+						}
+						
+					}
+					//14. Technical qualifiation3
+					if($technical_6_1 !='')
+					{
+						$applicant_technical_qualification_detail = array(
+							'reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'qual_desc_1' => $technical_6_1,
+							'year' => $technical_6_2,
+							'sl_no' => '6',
+							'institute_name' => $technical_6_3,
+							'thesis' => $technical_6_4,
+							'created_by' => $reg_user_id,
+							'created_on' => $now
+						);
+						$history_applicant = $this->db->insert('applicant_technical_qualification_detail',$applicant_technical_qualification_detail);
+						if(!$history_applicant){
+							$dbStatus = FALSE;
+							$dbMessage = 'ERROR updating Technical detail 6';
+						}
+					}
+					if($technical_7_1 !='')
+					{
+						$applicant_technical_qualification_detail = array(
+							'reg_user_id' => $reg_user_id,
+							'applied_program' => $program_code,
+							'qual_desc_1' => $technical_7_1,
+							'year' => $technical_7_2,
+							'institute_name' => $technical_7_3,
+							'sl_no' => '7',
+							'thesis' => $technical_7_4,
+							'created_by' => $reg_user_id,
+							'created_on' => $now
+						);
+						$history_applicant = $this->db->insert('applicant_technical_qualification_detail',$applicant_technical_qualification_detail);
+						if(!$history_applicant){
+							$dbStatus = FALSE;
+							$dbMessage = 'ERROR updating Technical detail 7';
+						}
+					}
+					
+					
+					/*for($ref = 0 ;$ref< 2 ;$ref ++ ){
+						$update_applicant_reference_array = array(
+								'reg_user_id' => $reg_user_id,
+								'applied_program' => $program_code,
+								'referenced_by' => $_POST['refname'.$ref],
+								'sl_no' => $ref,
+								'contact_address' => $_POST['refaddress'.$ref],
+								'email_id' => $_POST['refemail'.$ref],
+								'mobile_number' => $_POST['refmobile'.$ref],
+								'created_by' => $reg_user_id,
+								'created_on' => $now
+						);
+						$this->db->insert('applicant_reference_detail',$update_applicant_reference_array);
+						
+						if($this->db->affected_rows() == 0)
+						{
+							$dbstatus = FALSE;
+							$dbmessage = 'Error updating applicant_reference_detail';
+						}
+					}*/
+					for($i=0;$i < sizeof($_POST['txtorganization']);$i++){
+						if($_POST['txtorganization'][$i]!=''){
+							//echo $_POST['txtdate_from'][$i];
+							$from_date=date_create($_POST['txtdate_from'][$i]);
+							$to_date=date_create($_POST['txtdate_to'][$i]);
+							//echo date_format($from_date,"Y-m-d");
+							//die();\
+							$insert_research_data=
+							array("reg_user_id" => $reg_user_id,
+								"applied_program" => $program_code,
+								"sl_no"=>$i+1,
+								"organization"=>$_POST['txtorganization'][$i],
+								"post_held"=>$_POST['txtpost_held'][$i],
+								"date_from"=>date_format($from_date,"Y-m-d"),
+								"date_to"=> date_format($to_date,"Y-m-d"),
+								"nature_of_job"=>$_POST['txtnature_of_job'][$i],
+								"pay_band"=>$_POST['txtpay_band'][$i],
+								"basic_pay"=>$_POST['txtbasic_pay'][$i],
+								"created_by"=>$reg_user_id,
+								"created_on"=>$now);
+								$this->db->insert('applicant_research_experience_detail',$insert_research_data);
+								if($this->db->affected_rows() == 0)
+								{
+									$dbstatus = FALSE;
+									$dbmessage = 'Error updating applicant_research_experience_detail';
+								}
+						}
+						
+						
+					}
+					
+					
+					/*$insert_research_data=array();
+					for($i=0;$i < sizeof($_POST['txtorganization']);$i++){
+						if($_POST['txtorganization'][$i]!=''){
+							$data=Array("reg_user_id" => $reg_user_id,
+								"applied_program" => $program_code,
+								"organization"=>$i+1,
+								"post_held"=>$_POST['txtorganization'][$i],
+								"date_from"=>$_POST['txtdate_from'][$i],
+								"date_to"=>$_POST['txtdate_to'][$i],
+								"nature_of_job"=>$_POST['txtnature_of_job'][$i],
+								"pay_band"=>$_POST['txtpay_band'][$i],
+								"basic_pay"=>$_POST['txtbasic_pay'][$i],
+								"created_by"=>$reg_user_id,
+								"created_on"=>$now);
+								array_push($insert_research_data,$data);
+						}
+					}
+					$promoter_detail_inserted = $db->insertMulti('applicant_research_experience_detail' , $insert_research_data);
+					if(!$promoter_detail_inserted){
+						$dbStatus = "ERROR0";
+						$dbMessage = "ERROR inserting applicant_research_experience_detail";
+						$dbError = $db->getLastError();
+					}*/
+					
+					
+					if($dbStatus == TRUE)
+					{
+						
+						$this->db->select("program_code,year,sl_no");
+						$this->db->from('program_master');
+						$this->db->where('program_code',$program_code);
+						$result = $this->db->get();
+						foreach($result->result_array() as $appl)
+						{
+							$sl_no = $appl['sl_no'];
+							$program_code = $appl['program_code'];
+							$year = $appl['year'];
+							$new_sl_no = $sl_no + 1;
+							$changed_sl_no = '';
+							if($new_sl_no < 10)
+								$changed_sl_no = '00000'.$new_sl_no;
+							else if($new_sl_no < 100)
+								$changed_sl_no = '0000'.$new_sl_no;
+							else if($new_sl_no < 1000)
+								$changed_sl_no = '000'.$new_sl_no;
+							else if($new_sl_no < 10000)
+								$changed_sl_no = '00'.$new_sl_no;
+							else if($new_sl_no < 100000)
+								$changed_sl_no = '0'.$new_sl_no;
+						}
+							
+						$application_no = $program_code.$year.$changed_sl_no;
+						$application_data = array(
+							'reg_user_id'	=>$reg_user_id,
+							'appl_no'		=>$application_no,
+							'form_no'		=>$application_no,
+							'applied_program'=>$program_code,
+							'appl_status'	=>'Student Details Submitted',
+							'created_by'	=>$reg_user_id,
+							'created_on'	=>$now
+						);
+						$program_update_data = array(
+							'sl_no'=>$new_sl_no
+						);
+						$this->db->insert('applicant_appl_overview',$application_data);
+						
+						if($this->db->affected_rows() == 0)
+						{
+							$dbStatus = FALSE;
+							$dbmessage = 'Error inserting applicant_appl_overview';
+						}
+						else
+						{
+							//$this->db->insert('applicant_appl_overview_history',$application_data);
+							
+							
+							$this->db->where('program_code',$program_code);
+							$this->db->update('program_master',$program_update_data);
+							if($this->db->affected_rows() == 0)
+							{
+								$dbStatus = FALSE;
+								$dbmessage = 'Error updating program';
+							}
+							//echo $this->db->last_query();
+						}
+						
+						$this->db->select("document_type_code");
+						$this->db->from('program_document_setup');
+						$this->db->where('program_code',$program_code);
+						$this->db->where('record_status',1);
+						$result = $this->db->get();
+						$documentsReq = $result->result_array();
+						if($cmbReservedCategory == 'GEN' || $cmbReservedCategory == 'OBC'){
+							$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'CASTE');
+						}
+						if($radiobelong == 'NO'){
+							$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'DOMICILE');
+						}
+						if($radioPhysicallY == 'NO'){
+							$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'PHC');
+						}
+						if($radioGradCert == 'No'  || $radioMarkSheet == 'No'){
+							$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'HQC');
+						}
+						if($radioGradMarkSheet == 'No' || $radioMarkSheet == 'No'){
+							$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'HDMS');
+						}
+						if($radioID == 'No'){
+							$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'DL');
+						}
+						if($employed == 'NO'){
+							$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'NOC');
+						}
+						if($pay_mode == 'Online'){
+							$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'CHALLAN');
+						}
+						if($cmbNationality == 'OTH'){
+							$documentsReq = removeElementWithValue($documentsReq, 'document_type_code', 'CASTE');
+						}
+						
+						foreach($documentsReq AS $row1)
+						{
+							$document_list_insert_array = array(
+								'record_status'=>1,
+								'application_no'=>$application_no,
+								'document_type_code'=>$row1['document_type_code']
+							);
+							$this->db->insert('applicant_document_list',$document_list_insert_array);
+							if($this->db->affected_rows() == 0)
+							{
+								$dbStatus = FALSE;
+								$dbmessage = 'Error updating applicant_document_list';
+							}
+						}
+						/*echo $dbmessage;
+						die();*/
+						if($dbStatus == TRUE)
+						{
+							$this->db->trans_complete();
+							$this->session->set_userdata('admcode', $program_code);
+							$this->session->set_userdata('reg_user_id', $reg_user_id);
+							$this->session->set_userdata('appl_no', $application_no);
+							$this->session->set_userdata('mode', $mode);
+							$this->session->set_userdata('step', 3);
+							/*if( $this->db->trans_status() === FALSE){
+								$dbStatus = FALSE;
+								$dbmessage = 'Error While Saving';
+							}*/
+							return array('status' => $dbStatus, 'msg' => $dbmessage);
+						}
+						else
+						{
+							$this->db->trans_rollback();
+							return array('status' => $dbStatus, 'msg' => $dbmessage);
+						}
+						
+					}
+					else
+					{
+						$this->db->trans_rollback();
+						return array('status' => $dbStatus, 'msg' => $dbmessage);
+					}
+					
+					
+				}
+			break;
+			/**
+			* logic: To operate data for Role Master
+			* case:get_roledata,edit_role,add_role,delete_role,get_resource combo box
+			* author:Lina Mohapatra
+			* date :11/09/2017
+			*/
+			
+			case 'get_resource':
+				$output = array("aaData" => array());
+				$this->db->select("resource_code,resource_name");
+				$this->db->from("resource_master");
+				$this->db->where("record_status",1);
+				$this->db->group_by("resource_code",1);
+				$this->db->order_by("id");
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				return $output_data;
+			break;
+			
+			case 'get_roledata':            
+			 	$order = ''; 
+			    $Ocolumn = '';
+			    $Odir = '';
+				$order = $this->input->post('order');
+				if ( $order )
+					{
+						foreach($order as $row) {
+							$Ocolumn= $row['column'];
+							$Odir=  $row['dir'];
+						}
+						$this->db->order_by($Ocolumn,$Odir);
+					}else{
+						$this->db->order_by(1,"ASC");
+					}
+			 	$search = $this->input->post('search');
+			 	$header = array('role_code', 'role_name', 'index_page_url');
+			 	
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+				
+			    $iDisplayLength = $this->input->post('length');
+				$iDisplayStart = $this->input->post('start');
+				
+                $this->db->limit($iDisplayLength, $iDisplayStart);
+                $this->db->select('rom.`role_code`,rom.`role_name`, rem.resource_name  `index_page_url`, rem.resource_code  `index_page_code`');	
+                $this->db->from('role_master rom');
+                $this->db->join('resource_master rem', 'rom.index_page_url = rem.resource_code', 'LEFT');
+                $this->db->where('rom.`record_status`',1);
+                $this->db->where('rem.`record_status`',1);
+                $this->db->group_by('role_code');
+                
+				$res = $this->db->get();
+				$query = $res->result_array();
+				
+				$output = array("aaData" => array());
+				$header = array('role_code', 'role_name', 'index_page_url');
+				
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+                $this->db->select('rom.`role_code`,rom.`role_name`, rem.resource_name  `index_page_url`,rem.resource_code  `index_page_code`');	
+                $this->db->from('role_master rom');
+                $this->db->join('resource_master rem', 'rom.index_page_url = rem.resource_code', 'LEFT');
+                $this->db->where('rom.`record_status`',1);
+                $this->db->where('rem.`record_status`',1);
+                $this->db->group_by('role_code');
+				$res1 = $this->db->get();
+				$output["draw"] = intval( $this->input->post('draw') );
+				$output['iTotalRecords'] = $res1->num_rows(); 
+				$output['iTotalDisplayRecords'] =  $res1->num_rows();
+				$slno = 1;
+				foreach($query as $aRow)
+				{
+					$row[0] = $slno;
+					$row['sl_no'] = $slno;
+					$i = 1;
+					foreach($aRow as $key=>$value)
+					{
+						
+						$row[$i] = $value;
+						$row[$key] = $value;
+						$i++;
+					}
+					
+					$output['aaData'][] = $row;
+					$slno++;
+					unset($row);
+				}
+				return $output; 
+			break;
+			
+			case 'edit_role':  
+			
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	
+			 	$txtrolecode = $_POST['txtrolecode'];
+			 	$txtroleName = $_POST['txtroleName'];
+			 	$txtLandingPage = $_POST['txtLandingPage'];
+			 	$op_type = '';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+					$new_data = array(
+					'role_name' 					=>$txtroleName,
+					'index_page_url' 				=>$txtLandingPage,
+					'created_by'					=>'SUPERADMIN', 
+					'created_on'					=>$date,
+					'updated_by'					=>'SUPERADMIN' ,
+					'updated_on' 					=>$date,
+					'record_status'					=>1
+					);
+					$this->db->where('role_code', $txtrolecode);
+					$insert_user = $this->db->update('role_master', $new_data);
+					
+					if($this->db->affected_rows() ==0){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+					}
+					
+					$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'add_role':
+			 
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	
+			 	$txtrolecode = $_POST['txtrolecode'];
+			 	$txtroleName = $_POST['txtroleName'];
+			 	$txtLandingPage = $_POST['txtLandingPage'];
+			 	$op_type = '';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				$output = array();
+					$new_data = array(
+					'role_code' 					=>$txtrolecode,
+					'role_name' 					=>$txtroleName,
+					'index_page_url' 				=>$txtLandingPage,
+					'created_by'					=>'SUPERADMIN', 
+					'created_on'					=>$date,
+					'updated_by'					=>'SUPERADMIN' ,
+					'updated_on' 					=>$date,
+					'record_status'					=>1
+					);
+					$insert_user = $this->db->insert('role_master', $new_data);
+					if( ! $insert_user){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+					}
+				    $output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'delete_role':  
+			
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data deleted successfully';
+			 	$rolecode = $_POST['rolecode'];
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$new_data = array(
+				'record_status'					=>0
+				);
+				$this->db->where('role_code', $rolecode);
+				$insert_user = $this->db->update('role_master', $new_data);
+				
+					
+				if($this->db->affected_rows() ==0){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Deleting'.$this->db->_error_message();
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			
+			/**
+			* logic: To operate data for Resource Master
+			* case:get_resourcedata,add_resource,add_role,delete_role,edit_resource,delete_resource
+			* author:Lina Mohapatra
+			* date :11/09/2017
+			*/
+			case 'get_resourcedata':            
+			 	
+			 	$order = ''; 
+			    $Ocolumn = '';
+			    $Odir = '';
+				$order = $this->input->post('order');
+				if ( $order )
+					{
+						foreach($order as $row) {
+							$Ocolumn= $row['column'];
+							$Odir=  $row['dir'];
+						}
+						$this->db->order_by($Ocolumn,$Odir);
+					}else{
+						$this->db->order_by(1,"ASC");
+					}
+			 	$search = $this->input->post('search');
+			 	$header = array('resource_code', 'resource_name');
+			 	
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+				
+			    $iDisplayLength = $this->input->post('length');
+				$iDisplayStart = $this->input->post('start');
+				
+                $this->db->limit($iDisplayLength, $iDisplayStart);
+				$this->db->from('resource_master');
+                $this->db->select('`resource_code`,`resource_link`,`resource_name`,`id`');	
+                $this->db->where('record_status',1);
+                $this->db->group_by('resource_code');
+				$res = $this->db->get();
+				$query = $res->result_array();
+				$output = array("aaData" => array());
+				
+				$header = array('resource_code', 'resource_name');
+				
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+              	$this->db->from('resource_master');
+                $this->db->select('`resource_code`, `resource_name`');	
+                $this->db->where('record_status',1);
+                $this->db->group_by('resource_code');
+                
+				$res1 = $this->db->get();
+				$output["draw"] = intval( $this->input->post('draw') );
+				$output['iTotalRecords'] = $res1->num_rows(); 
+				$output['iTotalDisplayRecords'] =  $res1->num_rows();
+				$slno = 1;
+				foreach($query as $aRow)
+				{
+					$row[0] = $slno;
+					$row['sl_no'] = $slno;
+					$i = 1;
+					foreach($aRow as $key=>$value)
+					{
+						
+						$row[$i] = $value;
+						$row[$key] = $value;
+						$i++;
+					}
+					
+					$output['aaData'][] = $row;
+					$slno++;
+					unset($row);
+				}
+				return $output; 
+			break;
+			 
+			 
+			case 'add_resource': 
+			 
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	
+			 	$txtresourcelink = $_POST['txtresourcelink'];
+			 	$txtresourceName = $_POST['txtresourceName'];
+			 	$op_type = $_POST['op_type_resource'];
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				$qry = $this->db->query("SELECT MAX(id)+1 AS max_id FROM resource_master");
+			    $Sresult = $qry->result_array();
+			    $row2 = array_shift($Sresult);
+			    $txtresourcecode = "R".$row2['max_id'].rand(1000,9999);
+				
+				$output = array();
+				$new_data = array(
+				'resource_code' 				=>$txtresourcecode,
+				'resource_link' 				=>$txtresourcelink,
+				'resource_name' 				=>$txtresourceName,
+				'created_by'					=>'SUPERADMIN', 
+				'created_on'					=>$date,
+				'updated_by'					=>'SUPERADMIN' ,
+				'updated_on' 					=>$date,
+				'record_status'					=>1
+				);
+				$insert_user =  $this->db->insert('resource_master', $new_data);
+				if( ! $insert_user){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+			
+				return $output; 
+			break;
+			
+			case 'edit_resource':  
+			
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	
+			 	$txtresourcecode = $_POST['resource_code'];
+			 	$txtresourcelink = $_POST['txtresourcelink'];
+			 	$txtresourceName = $_POST['txtresourceName'];
+			 	
+			 	$op_type = $_POST['op_type_resource'];
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				
+				$new_data = array(
+				'resource_name' 				=>$txtresourceName,
+				'resource_link' 				=>$txtresourcelink,
+				'created_by'					=>'SUPERADMIN', 
+				'created_on'					=>$date,
+				'updated_by'					=>'SUPERADMIN' ,
+				'updated_on' 					=>$date,
+				'record_status'					=>1
+				);
+				$this->db->where('resource_code', $txtresourcecode);
+				$this->db->update('resource_master', $new_data);
+				
+				if($this->db->affected_rows() ==0){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+				
+			break;
+			
+			case 'delete_resource':  
+				
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data deleted successfully';
+            	
+			 	$resourcecode = $_POST['resourcecode'];
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$new_data = array(
+				'record_status'					=>0
+				);
+				$this->db->where('resource_code', $resourcecode);
+				$this->db->update('resource_master', $new_data);
+				
+				if($this->db->affected_rows() ==0){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Deleting'.$this->db->_error_message();
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			/**
+			* logic: To operate data for Group Master
+			* case:get_groupdata,get_table,get_tablevalue,get_tablemapvalue,delete_group,delete_groupmapdata,add_group
+			* author:Rahul Patro
+			* date :15/09/2017
+			*/
+			case 'get_groupdata':  
+				$order = ''; 
+			    $Ocolumn = '';
+			    $Odir = '';
+				$order = $this->input->post('order');
+				if ( $order )
+					{
+						foreach($order as $row) {
+							$Ocolumn= $row['column'];
+							$Odir=  $row['dir'];
+						}
+						$this->db->order_by($Ocolumn,$Odir);
+					}else{
+						$this->db->order_by(1,"ASC");
+					}
+			 	$search = $this->input->post('search');
+			 	$header = array('gm.group_name', 'tblop.table_name','gm.group_code','tblop.table_code');
+			 	
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+				
+			    $iDisplayLength = $this->input->post('length');
+				$iDisplayStart = $this->input->post('start');
+				
+                $this->db->limit($iDisplayLength, $iDisplayStart);
+				$this->db->from('group_master as gm');
+                $this->db->select('`gm.group_code`, `gm.group_name`,`tblop.table_name`,`tblop.table_code`');	
+                $this->db->join('table_operation as tblop','gm.table_code = tblop.table_code','inner');
+                $this->db->where('gm.record_status',1);
+				$res = $this->db->get();
+				$query = $res->result_array();
+				$output = array("aaData" => array());
+				
+				
+				
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+              	$this->db->from('group_master as gm');
+                $this->db->select('`gm.group_code`, `gm.group_name`,`tblop.table_name`,`tblop.table_code`');	
+                $this->db->join('table_operation as tblop','gm.table_code = tblop.table_code','inner');
+                $this->db->where('gm.record_status',1);
+                
+				$res1 = $this->db->get();
+				$output["draw"] = intval( $this->input->post('draw') );
+				$output['iTotalRecords'] = $res1->num_rows(); 
+				$output['iTotalDisplayRecords'] =  $res1->num_rows();
+				$slno = 1;
+				foreach($query as $aRow)
+				{
+					$row[0] = $slno;
+					$row['sl_no'] = $slno;
+					$i = 1;
+					foreach($aRow as $key=>$value)
+					{
+						
+						$row[$i] = $value;
+						$row[$key] = $value;
+						$i++;
+					}
+					
+					$output['aaData'][] = $row;
+					$slno++;
+					unset($row);
+				}
+				return $output; 
+			break;
+			case 'get_table':
+				$result = $this->db->get('table_operation');
+				return $result->result_array();;
+			break;
+			
+			/*case 'admin_dashboard' :
+			
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+				$sel_program_group = $_POST['program_group'];
+				
+                $this->db->select('program_name, P.program_code,program_group');
+                $this->db->from('program_master P');	
+                $this->db->join('user_program_mapping U','P.program_code = U.program_code','inner');
+                $this->db->where('STATUS','Active');
+                $this->db->where('program_end_date >=',$date);
+                $this->db->where('publish_status','YES');
+                $this->db->where('P.record_status','1');
+                $this->db->where('U.record_status','1');
+                $this->db->where('P.institute_code',$institute_code);
+                $this->db->where('U.institute_code',$institute_code);
+                $this->db->where('U.user_code',$user);
+                $this->db->where('program_group',$sel_program_group);
+                $result = $this->db->get();
+                //echo $this->db->last_query();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allProgrammes[] = $row;
+        		}
+        		
+        		$this->db->select('applied_program, COUNT(*) AS cnt');
+                $this->db->from('applicant_appl_overview A');	
+                $this->db->join('applicant_form_fee_overview B','A.appl_no = B.appl_no','inner');
+                $this->db->where('A.appl_status','Verified');
+                $this->db->group_by('applied_program');
+                $result = $this->db->get();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allApplied[$row['applied_program']] = $row['cnt'];
+        		}
+        		
+        		$this->db->select('applied_program, COUNT(A.appl_no) AS cnt');
+                $this->db->from('applicant_form_fee_overview A');	
+                $this->db->join('applicant_appl_overview B','B.appl_no = A.appl_no','LEFT');
+                $this->db->join('applicant_form_online_deposit C','B.appl_no = C.appl_no AND A.money_receipt_no = C.transaction_number','LEFT');
+                $this->db->where('C.transaction_number !=','');
+                $this->db->where('A.money_deposit_mode','ONLINE');
+                $this->db->where('C.deposit_status','SUCCESS');
+                $this->db->group_by('applied_program');
+                $result = $this->db->get();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allOnlinePaid[$row['applied_program']] = $row['cnt'];
+        		}
+        		
+        		$this->db->select('applied_program, COUNT(*) AS cnt');
+                $this->db->from('applicant_form_fee_overview A');	
+                $this->db->join('applicant_appl_overview B','B.appl_no = A.appl_no','INNER');
+                $this->db->where('money_receipt_no !=','');
+                $this->db->where('A.money_deposit_mode','ONLINE');
+                $this->db->where('A.money_deposit_mode !=','ON THE COUNTER');
+                $this->db->where('appl_status !=','Verified');
+                $this->db->group_by('applied_program');
+                $result = $this->db->get();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allPaymodePending[$row['applied_program']] = $row['cnt'];
+        		}
+        		
+        		$this->db->select('applied_program, COUNT(*) AS cnt');
+                $this->db->from('applicant_form_fee_overview A');	
+                $this->db->join('applicant_appl_overview B','B.appl_no = A.appl_no','INNER');
+                $this->db->where('money_receipt_no !=','');
+                $this->db->where('A.money_deposit_mode !=','ONLINE');
+                $this->db->where('A.money_deposit_mode !=','ON THE COUNTER');
+                $this->db->where('appl_status','Verified');
+                $this->db->group_by('applied_program');
+                $result = $this->db->get();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allPaymodeVerified[$row['applied_program']] = $row['cnt'];
+        		}
+        		
+        		$this->db->select('A.applied_program, COUNT(*) AS cnt');
+                $this->db->from('applicant_master A');	
+                $this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id AND A.applied_program = B.applied_program','INNER');
+                $this->db->where_in('category','("SC", "ST", "EBC")');
+                $this->db->where('appl_status','Verified');
+                $this->db->group_by('A.applied_program');
+                $result = $this->db->get();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allSCST[$row['applied_program']] = $row['cnt'];
+        		}
+        		
+        		$this->db->select('B.applied_program, COUNT(*) AS cnt');
+                $this->db->from('applicant_form_fee_overview A');	
+                $this->db->join('applicant_appl_overview B','B.appl_no = A.appl_no','INNER');
+                $this->db->join('applicant_master C','B.reg_user_id = C.reg_user_id AND B.applied_program = C.applied_program','INNER');
+                $this->db->where_in('C.category','("SC", "ST", "EBC")');
+                $this->db->where('A.money_deposit_mode','ON THE COUNTER');
+                $this->db->group_by('B.applied_program');
+                $result = $this->db->get();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allOnCounterSCST[$row['applied_program']] = $row['cnt'];
+        		}
+        		
+        		$this->db->select('A.applied_program, COUNT(*) AS cnt');
+                $this->db->from('applicant_master A');	
+                $this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id AND A.applied_program = B.applied_program','INNER');
+                $this->db->join('applicant_reg_master C','A.reg_user_id = C.reg_user_id AND A.applied_program = C.applied_program','INNER');
+                $this->db->join('applicant_form_fee_overview D','B.appl_no = D.appl_no','INNER');
+                $this->db->where('C.reg_mode','ONLINE');
+                $this->db->where('D.amount','0.00');
+                $this->db->where('appl_status','Verified');
+                $this->db->group_by('A.applied_program');
+                $result = $this->db->get();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allOtherSCST[$row['applied_program']] = $row['cnt'];
+        		}
+        		
+        		$this->db->select('B.applied_program, COUNT(*) AS cnt');
+                $this->db->from('applicant_form_fee_overview A');	
+                $this->db->join('applicant_appl_overview B','B.appl_no = A.appl_no','INNER');
+                $this->db->join('applicant_master C','B.reg_user_id = C.reg_user_id AND B.applied_program = C.applied_program','INNER');
+                $this->db->where_not_in('C.category','("SC", "ST", "EBC")');
+                $this->db->where('A.money_deposit_mode','ON THE COUNTER');
+                $this->db->group_by('B.applied_program');
+                $result = $this->db->get();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allOnCounter[$row['applied_program']] = $row['cnt'];
+        		}
+    			
+    			$html = ''; 
+    			$count = 0;
+				if(isset($allProgrammes))
+				{
+					$count = 0;
+					foreach($allProgrammes as $row)
+					{
+						if($row['program_group'] == $sel_program_group)
+						{
+							$allPaymodePending = isset($allPaymodePending[$row['program_code']]) ? $allPaymodePending[$row['program_code']] : 0;
+							$allPaymodeVerified = isset($allPaymodeVerified[$row['program_code']]) ? $allPaymodeVerified[$row['program_code']] : 0;
+							$allOtherSCST = isset($allOtherSCST[$row['program_code']]) ? $allOtherSCST[$row['program_code']] : 0;
+							$allOnCounterSCST = isset($allOnCounterSCST[$row['program_code']]) ? $allOnCounterSCST[$row['program_code']] : 0;
+							$allOnCounter = isset($allOnCounter[$row['program_code']]) ? $allOnCounter[$row['program_code']] : 0;
+							$allApplied = isset($allApplied[$row['program_code']]) ? $allApplied[$row['program_code']] : 0;
+							$count++;
+							
+							$html .= '<h3>'.$row['program_name'].'</h3>
+										<div class="row">
+										
+											<div class="col-lg-6 col-xs-5">
+							                    <div class="panel panel-primary">
+							                        <div class="panel-heading">
+							                            <div class="row">
+							                                <div class="col-xs-2">
+							                                </div>
+								                            <div class="col-xs-10 text-right">
+					                                    		<h3>'.$allOnlinePaid[$row['program_code']].'</h3>
+						                        				<h4>Total Online Paid</h4>
+			                                				</div>
+			                            				</div>
+			                        				</div>
+			                        				<a href="javascript:void(0);">
+							                            <div class="panel-footer">
+							                                <span class="pull-left">View Details</span>
+							                                <span class="pull-right"><i class="fa fa-arrow-circle-right"></i></span>
+							                                <div class="clearfix"></div>
+							                            </div>
+						                       		</a>
+						                    	</div>
+						                    </div>
+						               
+						                    <div class="col-lg-6 col-xs-5">
+							                    <div class="panel panel-green">
+							                        <div class="panel-heading">
+							                            <div class="row">
+							                                <div class="col-xs-12 text-right">
+																<h5>Pending:'.$allPaymodePending.'</h5>
+																<h5>Verified:'.$allPaymodeVerified.'</h5>
+																<h4>Other Payment Modes</h4>
+							                                </div>
+							                            </div>
+							                        </div>
+							                        <a href="javascript:void(0);">
+							                            <div class="panel-footer">
+							                                <span class="pull-left">View Details</span>
+							                                <span class="pull-right"><i class="fa fa-arrow-circle-right"></i></span>
+							                                <div class="clearfix"></div>
+							                            </div>
+							                        </a>
+							                    </div>
+							                    
+							                </div></br>
+							                ';
+							                
+							                
+							                
+					
+				                  
+				                  
+						}
+					}
+				}
+				return array('html' => $html,'count' => $count);
+			break;*/
+			case 'admin_dashboard' :
+			
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+				$post_val = $this->input->post('post_val');
+				
+                $this->db->select('program_name, P.program_code,program_group');
+                $this->db->from('program_master P');	
+                $this->db->join('user_program_mapping U','P.program_code = U.program_code','inner');
+                $this->db->where('STATUS','Active');
+                $this->db->where('program_end_date >=',$date);
+                $this->db->where('publish_status','YES');
+                $this->db->where('P.record_status','1');
+                $this->db->where('U.record_status','1');
+                $this->db->where('P.institute_code',$institute_code);
+                $this->db->where('U.institute_code',$institute_code);
+                $this->db->where('U.user_code',$user);
+                $result = $this->db->get();
+                //echo $this->db->last_query();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allProgrammes[] = $row;
+        		}
+        		$where = '';
+        		if($post_val != '0')
+				{
+					$where = "WHERE applied_program = '".$post_val."'";
+				}
+        		
+        		$this->db->select("SUM(total_profile) AS total_profile, SUM(total_upload) AS total_upload, SUM(total_paid) AS total_paid");
+        		$this->db->from("(SELECT  CASE WHEN appl_status = 'Student Details Submitted' || appl_status = 'Document Uploaded' || appl_status = 'Verified' THEN COUNT(*) END AS total_profile,
+									CASE WHEN appl_status = 'Document Uploaded' || appl_status = 'Verified' THEN COUNT(*) END AS total_upload,
+									CASE WHEN appl_status = 'Verified' THEN COUNT(*) END AS total_paid 
+									FROM applicant_appl_overview ".$where."
+									GROUP BY appl_status) AS A");
+        		$result = $this->db->get();
+        		$output_data = $result->result_array();
+        		foreach ($output_data as $row) 
+        		{
+        			$total_profile = $row['total_profile'];
+        			$total_upload = $row['total_upload'];
+        			$total_paid = $row['total_paid'];
+        		}
+        		
+    			$this->db->select('COUNT(*) AS cnt');
+                $this->db->from('applicant_reg_master A');
+                $result = $this->db->get();
+                $output_data = $result->result_array();
+				foreach ($output_data as $row) 
+        		{
+        			$allReg = $row['cnt'];
+        		}
+        		
+    			$html = ''; 
+    			
+				$html .= '<h4></h4>
+		        <div class="row">
+		        	<div class="col-md-3 col-sm-6 col-xs-12 dash_hover">
+				      	<div class="info-box">
+				        	<span class="info-box-icon bg-red"><i class="fa fa-user-plus"></i></span>
+
+				        	<div class="info-box-content">
+				          		<a href="'.base_url().'admin/manageRegistration">
+				          			<span class="info-box-text">'.$allReg.'</span>
+				          			<span class="info-box-number" style="display: block; font-size: 15px; font-weight: normal;">Total Registration</span>
+				          		</a>
+				        	</div>
+				        </div>
+				    </div>
+		            <div class="col-md-3 col-sm-6 col-xs-12 dash_hover">
+				      	<div class="info-box">
+				        	<span class="info-box-icon bg-green"><i class="fa fa-user"></i></span>
+
+				        	<div class="info-box-content">
+				          		<a href="javascript:void(0);" onclick="show_profile_detail()">
+				          			<span class="info-box-text">'.$total_profile.'</span>
+				          			<span class="info-box-number" style="display: block; font-size: 15px; font-weight: normal;">Total Profiles</span>
+				          		</a>
+				        	</div>
+				        </div>
+				    </div>
+		            <div class="col-md-3 col-sm-6 col-xs-12 dash_hover">
+				      	<div class="info-box">
+				        	<span class="info-box-icon bg-orange"><i class="fa fa-file"></i></span>
+
+				        	<div class="info-box-content">
+				          		<a href="javascript:void(0);" onclick="show_doc_detail()">
+				          			<span class="info-box-text">'.$total_upload.'</span>
+				          			<span class="info-box-number" style="display: block; font-size: 15px; font-weight: normal;">Document Uploaded</span>
+				          		</a>
+				        	</div>
+				        </div>
+				    </div>
+				    <div class="col-md-3 col-sm-6 col-xs-12 dash_hover">
+				      	<div class="info-box">
+				        	<span class="info-box-icon bg-aqua"><i class="fa fa-credit-card"></i></span>
+
+				        	<div class="info-box-content">
+				          		<a href="javascript:void(0);" onclick="show_pay_detail()">
+				          			<span class="info-box-text">'.$total_paid.'</span>
+				          			<span class="info-box-number" style="display: block; font-size: 15px; font-weight: normal;">Total Online Paid</span>
+				          		</a>	
+				        	</div>
+				        </div>
+				    </div>
+              	</div>';
+				$this->db->select("SUM(female) AS total_female, SUM(male) AS total_male");
+        		$this->db->from("(SELECT CASE WHEN gender = 'F' THEN COUNT(*) END AS female, CASE WHEN gender = 'M' THEN COUNT(*) END AS male
+								FROM applicant_master ".$where."
+								GROUP BY gender) AS A");
+        		$result = $this->db->get();
+        		$output_data = $result->result_array();
+        		
+        		foreach($output_data as $row)
+        		{
+					$total_female = $row['total_female'];
+					$total_male = $row['total_male'];
+				}
+        		
+				return array('html' => $html, 'female' => $total_female, 'male' => $total_male);
+			break;
+			case 'get_applnt_details_payment_pgCode' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		//$program =  isset($_POST['program'])? $_POST['program']:'';
+        		$cmbPGCode =  isset($_POST['cmbPGCode'])? $_POST['cmbPGCode']:'';
+        		$from_date =  isset($_POST['from_date'])? $_POST['from_date']:'';
+        		$to_date =  isset($_POST['to_date'])? $_POST['to_date']:'';
+				$from_date =  date("Y-m-d", strtotime($from_date) );
+				$to_date =  date("Y-m-d", strtotime($to_date) );
+				
+				
+				$this->db->select("C.appl_no,A.reg_user_id,B.full_name,D.order_number,D.deposit_status,
+				CASE WHEN D.deposit_status = 'SUCCESS' THEN E.money_receipt_no ELSE '' END AS money_receipt_no,
+				CASE WHEN D.deposit_status = 'SUCCESS' THEN DATE_FORMAT(E.depositdate,'%d-%m-%Y') ELSE '' END as depositdate,
+				pg_code,sub_category,E.amount");
+				$this->db->from('applicant_reg_master A');
+				$this->db->join('applicant_master B','A.reg_user_id = B.reg_user_id AND A.applied_program = B.applied_program','inner');
+				$this->db->join('applicant_appl_overview C ','A.reg_user_id = C.reg_user_id AND A.applied_program = C.applied_program','inner');
+				$this->db->join('applicant_form_online_deposit D ','C.appl_no = D.appl_no','INNER');
+				$this->db->join('applicant_form_fee_overview E ','C.appl_no = E.appl_no','inner');
+				$this->db->where('D.pg_code',$cmbPGCode);
+				$this->db->where('DATE(D.request_datetime)>=',$from_date);
+				$this->db->where('DATE(D.request_datetime)<=',$to_date);
+				$this->db->where('D.money_deposit_mode','ONLINE');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'get_applicant_details_payment' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program =  isset($_POST['program'])? $_POST['program']:'';
+        		$cmbPGCode =  isset($_POST['cmbPGCode'])? $_POST['cmbPGCode']:'';
+        		$from_date =  isset($_POST['from_date'])? $_POST['from_date']:'';
+        		$to_date =  isset($_POST['to_date'])? $_POST['to_date']:'';
+				$from_date =  date("Y-m-d", strtotime($from_date) );
+				$to_date =  date("Y-m-d", strtotime($to_date) );
+				$status =  isset($_POST['status'])? $_POST['status']:'';
+				
+				
+				$this->db->select("C.appl_no,A.reg_user_id,B.full_name,D.order_number,D.deposit_status,
+				CASE WHEN D.deposit_status = 'SUCCESS' THEN E.money_receipt_no ELSE '' END AS money_receipt_no,CASE WHEN D.deposit_status = 'SUCCESS' THEN DATE_FORMAT(E.depositdate,'%d-%m-%Y') ELSE '' END as depositdate,
+				pg_code,sub_category,E.amount");
+				$this->db->from('applicant_reg_master A');
+				$this->db->join('applicant_master B','A.reg_user_id = B.reg_user_id AND A.applied_program = B.applied_program','inner');
+				$this->db->join('applicant_appl_overview C ','A.reg_user_id = C.reg_user_id AND A.applied_program = C.applied_program','inner');
+				$this->db->join('applicant_form_online_deposit D ','C.appl_no = D.appl_no','INNER');
+				$this->db->join('applicant_form_fee_overview E ','C.appl_no = E.appl_no','inner');
+				$this->db->where('A.applied_program',$program);
+				$this->db->where('DATE(D.request_datetime)>=',$from_date);
+				$this->db->where('DATE(D.request_datetime)<=',$to_date);
+				if($cmbPGCode != '')
+				{
+					$this->db->where('D.pg_code',$cmbPGCode);
+				}
+				if($status != '')
+				{
+					$this->db->where('D.deposit_status',$status);
+				}
+				
+				$this->db->where('D.money_deposit_mode','ONLINE');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'db_get_json':            
+			 	
+			 	$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+                $this->db->select("COUNT(*) total,applied_program,program_name ");
+                $this->db->from("applicant_appl_overview");
+                $this->db->join("program_master","applied_program=program_code",'inner');
+                $this->db->group_by('applied_program');
+                
+                $result = $this->db->get();
+                //echo $this->db->last_query();die();
+                $output_data = $result->result_array();
+                $i=1;
+                $new_array=array();
+				foreach ($output_data as $row) 
+        		{
+        			//$row1['data']=array();
+        			
+        			$row1[0]=$row['program_name'];
+        			$row1[1]=(int)$row['total'];
+        			$row1[2]=$row['program_name'];
+					$i++;
+					array_push($new_array,$row1);
+        		}
+				
+				return $new_array; 
+			break;
+			case 'get_pie_category':            
+			 	
+			 	$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+        		$gender = $data;
+        		if($gender != '0')
+        		{
+					$this->db->where('gender', $gender);
+				} 
+				
+                $this->db->select("COUNT(*) total, category");
+                $this->db->from("applicant_master");
+                $this->db->group_by('category');
+                
+                $result = $this->db->get();
+                //echo $this->db->last_query();die();
+                $output_data = $result->result_array();
+                $i=1;
+                $new_array=array();
+				foreach ($output_data as $row) 
+        		{
+        			//$row1['data']=array();
+        			
+        			$row1[0]=$row['category'];
+        			$row1[1]=(int)$row['total'];
+        			//$row1[2]=$row['program_name'];
+					$i++;
+					array_push($new_array,$row1);
+        		}
+				
+				return $new_array; 
+			break;
+			case 'delete_groupmapdata':  
+				
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data deleted successfully';
+			 	$id = $data['id'];
+				$output = array();
+				$this->db->where('id', $id);
+				$this->db->delete('group_mapping'); 
+				if($this->db->affected_rows() ==0){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Deleting'.$this->db->_error_message();
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			case 'add_group':  
+				
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+			 	$txtGroupName = $data['txtGroupName'];
+			 	$cmbtable = $data['cmbtable'];
+			 	$cmbtablevalue = array();
+			 	$cmbtablevalue = isset($data['cmbtablevalue'])?$data['cmbtablevalue']:[];
+			 	if (in_array('multiselect-all', $cmbtablevalue)) 
+				{ 
+					$index = array_search('multiselect-all',$cmbtablevalue);
+					if($index !== FALSE){
+						unset($cmbtablevalue[$index]);
+						$cmbtablevalue = array_values($cmbtablevalue);
+					}
+					
+				}
+				$qry = $this->db->query("SELECT MAX(id)+1 AS max_id FROM group_master");
+				$Sresult = $qry->result_array();
+				$row2 = array_shift($Sresult);
+				$newid = "G".$row2['max_id'].rand(1000,9999);
+				$data = array( "group_code" =>$newid,
+								"group_name" => $this->input->post('txtGroupName'),
+								"table_code" => $this->input->post('cmbtable'),
+								"created_by" => 'superadmin',
+								"created_on" => date('Y-m-d H:i:s', now())
+							);
+				$insert_group = $this->db->insert('group_master',$data);
+				if( ! $insert_group){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}else{
+					$newarray=array();
+					$insert_group_map =TRUE;
+					for($i = 0;$i < sizeof($cmbtablevalue);$i++)
+					{
+						$newarray[] = array(
+								      'group_code' => $newid ,
+								      'map_value_code' => $cmbtablevalue[$i] ,
+								      'created_by' => 'superadmin',
+									  'created_on' => date('Y-m-d H:i:s', now())
+								   );
+					}
+					if(sizeof($cmbtablevalue) != 0)
+						$insert_group_map = $this->db->insert_batch('group_mapping',$newarray);
+					if( ! $insert_group_map){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+					}
+				}
+				$output = array();
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			case 'edit_group':  
+				
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+			 	$txtGroupName = $data['txtGroupName'];
+			 	$cmbtable = $data['cmbtable'];
+			 	$hidgroupcode = $data['hidgroupcode'];
+			 	$cmbtablevalue = array();
+			 	$cmbtablevalue = isset($data['cmbtablevalue'])?$data['cmbtablevalue']:[];
+			 	if (in_array('multiselect-all', $cmbtablevalue)) 
+				{ 
+					$index = array_search('multiselect-all',$cmbtablevalue);
+					if($index !== FALSE){
+						unset($cmbtablevalue[$index]);
+						$cmbtablevalue = array_values($cmbtablevalue);
+					}
+					
+				}
+				
+				$data = array( "group_name" => $this->input->post('txtGroupName'),
+								"updated_by" => 'superadmin'
+							);
+							$this->db->where("group_code",$hidgroupcode);
+				$insert_group = $this->db->update('group_master',$data);
+				if( ! $insert_group){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}else{
+					$newarray=array();
+					$insert_group_map =TRUE;
+					for($i = 0;$i < sizeof($cmbtablevalue);$i++)
+					{
+						$newarray[] = array(
+								      'group_code' => $hidgroupcode ,
+								      'map_value_code' => $cmbtablevalue[$i] ,
+								      'created_by' => 'superadmin',
+									  'created_on' => date('Y-m-d H:i:s', now())
+								   );
+					}
+					if(sizeof($cmbtablevalue) != 0)
+						$insert_group_map = $this->db->insert_batch('group_mapping',$newarray);
+					if( ! $insert_group_map){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+					}
+				}
+				$output = array();
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			/**
+			* logic: Operations for  Manage Group 
+			* case:Group Code Combo Box ,Role-Group datatable, add role_group data
+			* author:Lina Mohapatra
+			* date :13/09/2017
+			*/
+			case 'get_group':
+				$output = array("aaData" => array());
+				$this->db->select("group_code,group_name");
+				$this->db->from("group_master");
+				$this->db->where("record_status",1);
+				$this->db->group_by("group_code",1);
+				$this->db->order_by("id");
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				return $output_data;
+			break;
+			
+			case 'get_role_group_data':            
+			 	
+			 	$order = ''; 
+			    $Ocolumn = '';
+			    $Odir = '';
+				$order = $this->input->post('order');
+				if ( $order )
+					{
+						foreach($order as $row) {
+							$Ocolumn= $row['column'];
+							$Odir=  $row['dir'];
+						}
+						$this->db->order_by($Ocolumn,$Odir);
+					}else{
+						$this->db->order_by(1,"ASC");
+					}
+			 	$search = $this->input->post('search');
+			 	$header = array('rm.role_name', 'gm.group_name','rgm.name');
+			 	
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+				
+			    $iDisplayLength = $this->input->post('length');
+				$iDisplayStart = $this->input->post('start');
+				
+                $this->db->limit($iDisplayLength, $iDisplayStart);
+                $this->db->select('rm.role_name,gm.group_name,rgm.name,rm.role_code,gm.group_code,rgm.role_group_code');
+                $this->db->from('role_group_mapping  rgm');	
+                $this->db->join('role_master rm', 'rgm.role_code = rm.role_code', 'LEFT');
+                $this->db->join('group_master gm', 'rgm.group_code = gm.group_code', 'LEFT');
+                $this->db->where('rgm.record_status',1);
+                $this->db->where('rm.record_status',1);
+                $this->db->where('gm.record_status',1);
+                $this->db->group_by('rm.role_code');
+                $this->db->group_by('gm.group_code');
+				$res = $this->db->get();
+				$query = $res->result_array();
+				$output = array("aaData" => array());
+				
+				$header = array('rm.role_name', 'gm.group_name','rgm.name');
+				
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+				
+              	$this->db->select('`rm.role_name`, `gm.group_name`,`rgm.name`,`rm.role_code`,`gm.group_code`');
+                $this->db->from('role_group_mapping  rgm');	
+                $this->db->join('role_master rm', 'rgm.role_code = rm.role_code', 'LEFT');
+                $this->db->join('group_master gm', 'rgm.group_code = gm.group_code', 'LEFT');
+                $this->db->where('rgm.record_status',1);
+                $this->db->where('rm.record_status',1);
+                $this->db->where('gm.record_status',1);
+                $this->db->group_by('rm.role_code');
+                $this->db->group_by('gm.group_code');
+                
+				$res1 = $this->db->get();
+				$output["draw"] = intval( $this->input->post('draw') );
+				$output['iTotalRecords'] = $res1->num_rows(); 
+				$output['iTotalDisplayRecords'] =  $res1->num_rows();
+				$slno = 1;
+				foreach($query as $aRow)
+				{
+					$row[0] = $slno;
+					$row['sl_no'] = $slno;
+					$i = 1;
+					foreach($aRow as $key=>$value)
+					{
+						
+						$row[$i] = $value;
+						$row[$key] = $value;
+						$i++;
+					}
+					
+					$output['aaData'][] = $row;
+					$slno++;
+					unset($row);
+				}
+				return $output; 
+			break;
+			
+			case 'add_role_group': 
+			
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	
+			 	$role_code = $_POST['cmbrolecode'];
+			 	$group_code = $_POST['cmbgroupcode'];
+			 	$role_group_name = $_POST['txtRoleGroup'];
+			 	
+			 	$this->db->select('`role_code`, `group_code`');
+                $this->db->from('role_group_mapping');	
+                $this->db->where('role_code',$role_code);
+                $this->db->where('group_code',$group_code);
+                $this->db->where('record_status',1);
+               	$res = $this->db->get();
+			 	$query = $res->result_array();
+			 	
+			 	if($res->num_rows() > 0) {
+					$dbstatus = FALSE;
+					$dbmessage = 'Error Duplicate Record Entry';
+				}
+			 	else{
+			 		$this->db->select_max('id');
+	                $this->db->from('role_group_mapping');	
+				 	$res = $this->db->get();
+				 	$query = $res->result_array();
+				 	
+				 	foreach($query as $aRow)
+					{
+						$max_id = $aRow['id'];
+					}
+				 	if($max_id == ''){
+						$max_id = 0;
+					}
+					else{
+						$max_id = $max_id ;
+					}
+					
+					$role_group_code = $role_code .'_'.$group_code.$max_id;
+					
+					$output = array();
+					$new_data = array(
+					'role_group_code' 				=>$role_group_code,
+					'name' 							=>$role_group_name,
+					'role_code' 					=>$role_code,
+					'group_code' 					=>$group_code,
+					'created_by'					=>'SUPERADMIN', 
+					'created_on'					=>$date,
+					'updated_by'					=>'SUPERADMIN' ,
+					'updated_on' 					=>$date,
+					'record_status'					=>1
+					);
+					$insert_user =  $this->db->insert('role_group_mapping', $new_data);
+					if( ! $insert_user){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error While Saving';
+					}	
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'edit_role_group':  
+			
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	
+			 	$hidtxtRole_group_code = $_POST['hidtxtRole_group_code'];
+			 	$role_code = $_POST['cmbrolecode'];
+			 	$group_code = $_POST['cmbgroupcode'];
+			 	$role_group_name = $_POST['txtRoleGroup'];
+			 	
+			 	
+			 	$this->db->select('`role_code`, `group_code`');
+                $this->db->from('role_group_mapping');	
+                $this->db->where('role_code',$role_code);
+                $this->db->where('group_code',$group_code);
+                $this->db->where('record_status',1);
+               	$res = $this->db->get();
+			 	$query = $res->result_array();
+			 	
+			 	if($res->num_rows() > 0) {
+					$dbstatus = FALSE;
+					$dbmessage = 'Error Duplicate Record ';
+				}
+			 	else{
+			 		date_default_timezone_set('Asia/Kolkata');
+					$date = date('Y-m-d H:i:s', time());
+					$output = array();
+					
+					$new_data = array(
+					'name' 							=>$role_group_name,
+					'role_code' 					=>$role_code,
+					'group_code' 					=>$group_code,
+					'created_by'					=>'SUPERADMIN', 
+					'created_on'					=>$date,
+					'updated_by'					=>'SUPERADMIN' ,
+					'updated_on' 					=>$date,
+					'record_status'					=>1
+					);
+					$this->db->where('role_group_code', $hidtxtRole_group_code);
+					$this->db->update('role_group_mapping', $new_data);
+					
+					if($this->db->affected_rows() ==0){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+					}
+				}
+				
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+				
+			break;
+			
+			case 'delete_role_group':  
+				
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data deleted successfully';
+            	
+			 	$role_group_code = $_POST['rolegroupcode'];
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$new_data = array(
+				'record_status'					=>0
+				);
+				$this->db->where('role_group_code', $role_group_code);
+				$this->db->update('role_group_mapping', $new_data);
+				
+				if($this->db->affected_rows() ==0){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Deleting';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			
+			/**
+			* logic: Operations for  Manage User-to-RoleGroup 
+			* case:Group Code Combo Box ,Role-Group datatable, add role_group data
+			* author:Lina Mohapatra
+			* date :15/09/2017
+			*/
+			
+			case 'get_rolegroup_code':
+				$output = array("aaData" => array());
+				$this->db->select("role_group_code,name");
+				$this->db->from("role_group_mapping");
+				$this->db->where("record_status",1);
+				$this->db->group_by("role_group_code",1);
+				$this->db->order_by("id");
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				return $output_data;
+			break;
+			
+			case 'get_user_code':
+				$output = array("aaData" => array());
+				$this->db->select("user_code,user_name");
+				$this->db->from("user_master");
+				$this->db->where("record_status",1);
+				$this->db->group_by("user_code",1);
+				$this->db->order_by("id");
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				return $output_data;
+			break;
+			
+			case 'get_user_role_group_data':            
+			 	
+			 	$order = ''; 
+			    $Ocolumn = '';
+			    $Odir = '';
+				$order = $this->input->post('order');
+				if ( $order )
+					{
+						foreach($order as $row) {
+							$Ocolumn= $row['column'];
+							$Odir=  $row['dir'];
+						}
+						$this->db->order_by($Ocolumn,$Odir);
+					}else{
+						$this->db->order_by(1,"ASC");
+					}
+			 	$search = $this->input->post('search');
+			 	$header = array('urgp.`user_rolegroup_code', 'um.user_name','rgm.`name`');
+			 	
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+				if($this->input->post('cmbrolegroup')){
+					$this->db->where('urgp.role_group_code',$this->input->post('cmbrolegroup'));
+				}
+			    $iDisplayLength = $this->input->post('length');
+				$iDisplayStart = $this->input->post('start');
+				
+                $this->db->limit($iDisplayLength, $iDisplayStart);
+                $this->db->select('um.`user_code`,rgm.`role_group_code`,um.user_name,rgm.`name`,urgp.`user_rolegroup_code`');
+                $this->db->from('user_role_group_map urgp ');	
+                $this->db->join('user_master um', 'urgp.user_code = um.user_code', 'LEFT');
+                $this->db->join('role_group_mapping rgm', 'urgp.role_group_code = rgm.role_group_code', 'LEFT');
+                $this->db->where('rgm.record_status',1);
+                $this->db->where('um.record_status',1);
+                $this->db->where('urgp.record_status',1);
+                $this->db->group_by('urgp.`user_rolegroup_code`');
+                $this->db->group_by('um.user_code');
+				$res = $this->db->get();
+				$query = $res->result_array();
+				$output = array("aaData" => array());
+				
+				$header = array('urgp.`user_rolegroup_code', 'um.user_name','rgm.`name`');
+				
+			 	if($search['value'] != ''){
+					for($i=0;$i <count($header);$i++ ){
+						$this->db->or_like($header[$i], $search['value']);
+					}
+				}
+				if($this->input->post('cmbrolegroup')){
+					$this->db->where('urgp.role_group_code',$this->input->post('cmbrolegroup'));
+				}
+                $this->db->select('um.`user_code`,rgm.`role_group_code`,urgp.`user_rolegroup_code`,um.user_name,rgm.`name`');
+                $this->db->from('user_role_group_map urgp ');	
+                $this->db->join('user_master um', 'urgp.user_code = um.user_code', 'LEFT');
+                $this->db->join('role_group_mapping rgm', 'urgp.role_group_code = rgm.role_group_code', 'LEFT');
+                $this->db->where('rgm.record_status',1);
+                $this->db->where('um.record_status',1);
+                $this->db->where('urgp.record_status',1);
+                $this->db->group_by('urgp.`user_rolegroup_code`');
+                $this->db->group_by('um.user_code');
+                
+				$res1 = $this->db->get();
+				$output["draw"] = intval( $this->input->post('draw') );
+				$output['iTotalRecords'] = $res1->num_rows(); 
+				$output['iTotalDisplayRecords'] =  $res1->num_rows();
+				$slno = 1;
+				foreach($query as $aRow)
+				{
+					$row[0] = $slno;
+					$row['sl_no'] = $slno;
+					$i = 1;
+					foreach($aRow as $key=>$value)
+					{
+						
+						$row[$i] = $value;
+						$row[$key] = $value;
+						$i++;
+					}
+					
+					$output['aaData'][] = $row;
+					$slno++;
+					unset($row);
+				}
+				return $output; 
+			break;
+			
+			case 'add_user_role_group': 
+			
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	
+			 	$txtrole_group = $_POST['txtrole_group'];
+			 	$cmbuser_name = $_POST['cmbuser_name'];
+			 	if (in_array('multiselect-all', $cmbuser_name)) 
+				{ 
+					$index = array_search('multiselect-all',$cmbuser_name);
+					if($index !== FALSE){
+						unset($cmbuser_name[$index]);
+						$cmbuser_name = array_values($cmbuser_name);
+					}
+					
+				}
+			 	$newarray=array();
+			    $insert_user_role_group_map =TRUE;
+			   // print_r($cmbuser_name);die();
+			    for($i = 0;$i < sizeof($cmbuser_name);$i++)
+			    {
+			     	$user_rolegroup_code = $txtrole_group.'#'.$cmbuser_name[$i];
+			     	
+			      	$newarray[] = array(
+			              'user_rolegroup_code' 		=> $user_rolegroup_code ,
+			              'user_code' 					=> $cmbuser_name[$i] ,
+			              'role_group_code' 			=> $txtrole_group,
+			           	  'created_by'					=>'SUPERADMIN', 
+						  'created_on'					=>$date,
+						  'updated_by'					=>'SUPERADMIN' ,
+						  'updated_on' 					=>$date,
+						  'record_status'				=>1
+			        );
+			        
+			    }
+			     if(sizeof($cmbuser_name) != 0)
+				      $insert_user_role_group_map = $this->db->insert_batch('user_role_group_map',$newarray);
+				 if( ! $insert_user_role_group_map){
+				      $dbstatus = FALSE;
+				      $dbmessage = 'Error While Saving';
+			     }
+			     
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'delete_user_rolegroup':  
+				
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data deleted successfully';
+            	
+			 	$user_role_group_code = $data['userrolegroupcode'];
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$this->db->where('user_rolegroup_code', $user_role_group_code);
+				$this->db->delete('user_role_group_map'); 
+								
+				if($this->db->affected_rows() ==0){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Deleting';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			case 'delete_rolegroup':  
+				
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data deleted successfully';
+            	
+			 	$rolegroupcode = $data['rolegroupcode'];
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array(); 
+				$new_data = array(
+					'record_status'	=>0
+				);
+				$this->db->where('role_group_code', $rolegroupcode);
+				$this->db->update('role_group_mapping', $new_data);			
+				if($this->db->affected_rows() ==0){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Deleting';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			case 'get_program_email' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$this->db->select("SUBSTRING_INDEX(program_code,'_',1) AS progcode,program_name,DATE_FORMAT(program_start_date,'%d-%m-%Y') AS program_start_date,
+					DATE_FORMAT(program_end_date,'%d-%m-%Y') AS program_end_date,program_master.id,program_code");
+				$this->db->from('program_master');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_end_date>=',$date);
+				$this->db->not_like('program_master.program_code','PROG');
+				$this->db->where('record_status', 1);
+				$this->db->order_by("id");
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_program_sms' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program = $_POST['program'];				
+				$this->db->select("A.sms_type as id, A.sms_type as type, CASE WHEN B.record_status IS NULL THEN 0 WHEN B.record_status = 0 THEN 0 ELSE 1 END AS record_status", FALSE);
+				$this->db->from('sms_setup A');
+				$this->db->join('program_sms_setup B', 'A.sms_type = B.sms_type', 'LEFT');
+				$this->db->where('B.institute_code',$institute_code);				
+				$this->db->where('B.program_code',$program);				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_all_sms' :
+				$this->db->select("sms_type as id,sms_type as name,sms_type");
+				$this->db->from('sms_setup');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_communication_sms' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program = $_POST['program_code'];				
+				$this->db->select("A.sms_type, A.sms_type as sms, CASE WHEN B.record_status IS NULL THEN 0 WHEN B.record_status = 0 THEN 0 ELSE 1 END AS record_status", FALSE);
+				$this->db->from('sms_setup A');
+				$this->db->join('program_sms_setup B', 'A.sms_type = B.sms_type', 'B.program_code = '.$program, 'LEFT');
+				$this->db->where('B.program_code',$program);
+				$this->db->group_by('A.sms_type,B.record_status');				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'update_multiple_sms' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$arr_program_code = array();
+				$category_codes = array();
+				$arr_show_status = array();
+				$program_codes = $_POST['program_codes'];
+				$category_codes = $_POST['category_codes']?$_POST['category_codes']:'';
+				//print_r($category_codes);
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);	
+				
+				
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_sms_setup');
+					$this->db->where('program_code',$arr_program_code[$i]);
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+		            	$count = $aRow['program_code'];
+		            }
+					for($j=0;$j<sizeof($category_codes);$j++)
+					{
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							if($count >= 1)
+			            	{
+								$data = array(
+									'record_status' 				=>$show_status[$j],
+									'updated_by'					=>$user,
+									'updated_on'					=>$date
+								);
+								$this->db->where('program_code',$arr_program_code[$i]);
+								$this->db->where('sms_type',$category_codes[$j]);
+								$update_user = $this->db->update('program_sms_setup',$data);
+								if(! $update_user){
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Assigning";
+								}
+							}
+							else
+							{
+								$new_data = array(
+									'program_code' 					=>$arr_program_code[$i],
+									'sms_type' 						=>$category_codes[$j],
+									'record_status' 				=>$show_status[$j],
+									'institute_code' 				=>$institute_code,
+									'created_by'					=>$user,
+									'created_on'					=>$date
+								);
+								$insert_user = $this->db->insert('program_sms_setup',$new_data);
+								if($insert_user){
+									$dbStatus = "SUCCESS";
+									$dbMessage = "Data successfully saved";
+								}
+								else
+								{	
+									$dbStatus = "ERROR";
+									$dbMessage ="Error in saving";
+									
+								}
+							}
+						}
+					}
+				}
+		
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			case 'update_single_sms' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$arr_menu_code = array();
+				$program_code = $_POST['program_code'];
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				$this->db->select("sms_type");
+				$this->db->from('sms_setup');
+				$this->db->order_by('sms_type');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$i = 0;
+				$output_data = $result->result_array();
+				foreach ($output_data as $row) 
+	            {
+	            	$sms_type = $row['sms_type'];
+	            	$this->db->select("count(program_code) AS program_code");
+					$this->db->from('program_sms_setup');
+					$this->db->where('program_code',$program_code);
+					$this->db->where('sms_type',$sms_type);
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'record_status' 				=>$show_status[$i],
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);
+							$this->db->where('program_code',$program_code );
+							$this->db->where('sms_type',$sms_type );
+							$sql = $this->db->update('program_sms_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$program_code,
+								'sms_type' 						=>$sms_type,
+								'record_status' 				=>$show_status[$i],
+								'institute_code' 				=>$institute_code,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('program_sms_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	                $i++;
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			case 'get_communication_menu' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$cmbProgramFilter = $_POST['program'];				
+				$this->db->select("A.email_type,CASE WHEN B.record_status IS NULL THEN 0 WHEN B.record_status = 0 THEN 0 ELSE 1 END AS record_status", FALSE);
+				$this->db->from('email_setup A');
+				$this->db->join('program_email_setup B', 'A.email_type = B.email_type', 'LEFT');
+				$this->db->where('B.program_code',$cmbProgramFilter);			
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_communication_assign' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$this->db->select("DISTINCT email_type,email_type as email", FALSE);
+				$this->db->from('program_email_setup');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			
+			case 'update_multiple_email' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$arr_program_code = array();
+				$email_codes = array();
+				$arr_show_status_email = array();
+				$program_codes = $_POST['program_codes'];
+				$email_codes = $_POST['email_codes']?$_POST['email_codes']:'';
+				//print_r($category_codes);
+				$show_status = $_POST['show_status_email']?$_POST['show_status_email']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);	
+				
+				
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_email_setup');
+					$this->db->where('program_code',$arr_program_code[$i]);
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+		            	$count = $aRow['program_code'];
+		            }
+					for($j=0;$j<sizeof($email_codes);$j++)
+					{
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							if($count >= 1)
+			            	{
+								$data = array(
+									'record_status' 				=>$show_status[$j],
+									'updated_by'					=>$user,
+									'updated_on'					=>$date
+								);
+								$this->db->where('program_code',$arr_program_code[$i]);
+								$this->db->where('email_type',$email_codes[$j]);
+								$update_user = $this->db->update('program_email_setup',$data);
+								if(! $update_user){
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Assigning";
+								}
+							}
+							else
+							{
+								$new_data = array(
+									'program_code' 					=>$arr_program_code[$i],
+									'email_type' 					=>$email_codes[$j],
+									'record_status' 				=>$show_status[$j],
+									'institute_code' 				=>$institute_code,
+									'created_by'					=>$user,
+									'created_on'					=>$date
+								);
+								$insert_user = $this->db->insert('program_email_setup',$new_data);
+								if($insert_user){
+									$dbStatus = "SUCCESS";
+									$dbMessage = "Data successfully saved";
+								}
+								else
+								{	
+									$dbStatus = "ERROR";
+									$dbMessage ="Error in saving";
+									
+								}
+							}
+						}
+						
+					}
+				}
+		
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			case 'get_rank_data':
+				$institute_code = $this->session->userdata('institute_code');
+				$seladmcode = $this->input->post('applied_program');
+				$reg_user_id = $this->input->post('reg_user_id');
+				if($seladmcode!=''){
+					$this->db->where('R.applied_program',$seladmcode);
+				}
+				if($reg_user_id!=''){
+					$this->db->where('R.mobile',$reg_user_id);
+				}
+				/*if($cmbState!=''){
+					$this->db->where('A.state_code',$cmbState);
+				}*/
+				$this->db->select("R.full_name,jee_rollno,pm.program_name,marks_obtained,gcd.description as applicant_status_show,rank_sc,rank_st,rank_obc,rank_ph,rank_gen, 1st_center, 2nd_center, 3rd_center,state,R.reg_user_id,R.applied_program,R.appl_no,R.applicant_status");
+				$this->db->from('applicant_rank_master R');
+				$this->db->join('program_master pm','R.applied_program = pm.program_code','inner');
+				$this->db->join('gen_code_description gcd','R.applicant_status = gcd.code','left');
+				$this->db->where('R.record_status',1);
+				$this->db->like('applied_program',$institute_code,'left');
+				$result = $this->db->get();
+				/*echo $this->db->last_query();die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+					
+			break;
+			case 'get_call_list':
+			
+				$seladmcode = $this->input->post('applied_program');
+				$institute_code = $this->session->userdata('institute_code');
+				/*$reg_user_id = $this->input->post('reg_user_id');*/
+				if($seladmcode!=''){
+					$this->db->where('rd.applied_program',$seladmcode);
+				}
+				/*if($reg_user_id!=''){
+					$this->db->where('R.mobile',$reg_user_id);
+				}*/
+				/*if($cmbState!=''){
+					$this->db->where('A.state_code',$cmbState);
+				}*/
+				$this->db->select("rd.reg_user_id,pm.program_name,DATE_FORMAT (rd.`downloaded_date`,'%d-%m-%Y') AS downloaded_date");
+				$this->db->from('`rankcard_downloadstatus` rd ');
+				$this->db->join('`applicant_appl_overview` aao','rd.reg_user_id  = aao.reg_user_id AND rd.applied_program = aao.applied_program','left');
+				$this->db->join('program_master pm','aao.applied_program = pm.program_code','left');
+				$this->db->where('rd.record_status',1);
+				  $this->db->where('pm.publish_status','YES');
+				$this->db->like('rd.applied_program',$institute_code,'left');
+				
+				$result = $this->db->get();
+				/*echo $this->db->last_query();die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+					
+			break;
+			
+			case 'update_communication_email' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$arr_menu_code = array();
+				$arr_menu_code = array();
+				$show_status = array();
+				$program_code = $_POST['program'];
+				$arr_menu_code = $_POST['arr_menu_code']?$_POST['arr_menu_code']:'';
+				$show_status = $_POST['arr_field_status']?$_POST['arr_field_status']:'';
+				$this->db->select("email_type");
+				$this->db->from('email_setup');	
+				$this->db->order_by('email_type');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$i = 0;
+				$output_data = $result->result_array();
+				foreach ($output_data as $row) 
+	            {
+	            	$this->db->select("count(program_code) AS program_code");
+					$this->db->from('program_email_setup');
+					$this->db->where('program_code',$program_code);
+					$this->db->where('email_type',$arr_menu_code[$i]);
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'record_status' 				=>$show_status[$i],
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);
+							$this->db->where('program_code',$program_code );
+							$this->db->where('email_type',$arr_menu_code[$i] );
+							$sql = $this->db->update('program_email_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$program_code,
+								'email_type' 					=>$arr_menu_code[$i] ,
+								'record_status' 				=>$show_status[$i],
+								'institute_code' 				=>$institute_code,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('program_email_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	                $i++;
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			
+			case 'get_program_tabledata':
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$this->db->select("program_group_code,program_master.program_group,SUBSTRING_INDEX(program_master.program_code,'_',1) AS progcode,program_name,program_master.program_desc,program_master.program_duration,
+					program_master.YEAR,program_master.sl_no,form_template_master.file_name,registration_template_master.file_name as reg_file_name,
+					program_start_date AS p_start_date,
+					program_end_date AS p_end_date,publish_status,online_payment_transaction_no,
+					omr_no,program_master.template_code,program_master.registration_template_code as reg_template_code,
+					apply_start_date AS a_start_date,apply_end_date AS a_end_date,
+					DATE_FORMAT(program_start_date,'%d-%m-%Y') AS program_start_date,
+					DATE_FORMAT(program_end_date,'%d-%m-%Y') AS program_end_date,
+					DATE_FORMAT(apply_start_date,'%d-%m-%Y %h:%i') AS apply_start_date,
+					DATE_FORMAT(apply_end_date,'%d-%m-%Y %h:%i') AS apply_end_date,
+					program_master.program_code,elective_subjects,sequence_code,sequence_no,
+					DATE_FORMAT(birth_start_date,'%d-%m-%Y') AS birth_start_date,
+					DATE_FORMAT(birth_end_date,'%d-%m-%Y') AS birth_end_date,
+					DATE_FORMAT(admitcard_start_date,'%d-%m-%Y') AS admitcard_start_date,
+					DATE_FORMAT(admitcard_end_date,'%d-%m-%Y') AS admitcard_end_date,status");
+				$this->db->from('program_master');
+				$this->db->join('program_group_master','program_master.program_group = program_group_master.program_group_code','left');
+				$this->db->join('form_template_master','program_master.template_code = form_template_master.template_code','left');
+				$this->db->join('registration_template_master','program_master.template_code = registration_template_master.template_code','left');
+				$this->db->join('program_eligibility_setup','program_master.program_code = program_eligibility_setup.program_code','left');
+				$this->db->join('index_sequence_setup','program_master.program_code = index_sequence_setup.program_code','left');
+				$this->db->where('program_master.institute_code',$institute_code);
+				$this->db->where('program_master.record_status','1');
+				$this->db->where('form_template_master.record_status','1');
+				$this->db->where('program_end_date>=',$date);
+				$this->db->not_like('program_master.program_code','PROG');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$sl_no = 1;
+				foreach ($output_data as $row) 
+	            {
+	                $row1 = array();
+	                $row1[0] = $sl_no;
+					$row1['sl_no'] = $sl_no;
+					$row1[1] = $row['program_group_code']; 
+					$row1['program_group_code'] = $row['program_group_code'];
+					$row1[2] = $row['progcode']; 
+					$row1['progcode'] = $row['progcode'];
+					$row1[3] = $row['program_name']; 
+					$row1['program_name'] = $row['program_name'];
+					$row1[4] = $row['program_desc']; 
+					$row1['program_desc'] = $row['program_desc'];
+					$row1[5] = $row['program_duration']; 
+					$row1['program_duration'] = $row['program_duration'];
+					$row1[6] = $row['YEAR'];
+					$row1['year'] = $row['YEAR'];
+					$row1[7] = $row['sl_no'];
+					$row1['order'] = $row['sl_no'];
+					$file_name = $row['file_name'];
+					$view_file = explode(".", $file_name);
+					$file_name = "view_".$file_name;
+					$row1[8] = $file_name;
+					$row1['file_name'] = $file_name;
+					$row1[9] = $row['program_start_date'];
+					$row1['program_start_date'] = $row['program_start_date'];
+					$row1[10] = $row['program_end_date'];
+					$row1['program_end_date'] = $row['program_end_date'];
+					if($row['publish_status'] == 'YES')
+					{
+						$row1[11] = "ACTIVE";
+					    $row1['publish_status'] = "ACTIVE";
+					}
+					else if($row['publish_status'] == 'NO')
+					{
+						$row1[11] = "INACTIVE";
+					    $row1['publish_status'] = "INACTIVE";
+					}
+					$row1[12] = $row['online_payment_transaction_no'];
+					$row1['online_payment_transaction_no'] = $row['online_payment_transaction_no'];
+					$row1[13] = $row['omr_no'];
+					$row1['omr_no'] = $row['omr_no'];
+					$row1[14] = "From ".date('d-m-Y', strtotime($row['program_start_date']))."<br/> To ".date('d-m-Y', strtotime($row['program_end_date']));
+					$row1['program_date'] = "From ".date('d-m-Y', strtotime($row['program_start_date']))."<br/> To ".date('d-m-Y', strtotime($row['program_end_date']));
+					$row1[15] = $row['apply_start_date'];
+					$row1['apply_start_date'] = $row['apply_start_date'];
+					$row1[16] = $row['apply_end_date'];
+					$row1['apply_end_date'] = $row['apply_end_date'];
+					$row1[17] = "From ".$row['apply_start_date']."<br/> To ".$row['apply_end_date'];
+					$row1['apply_date'] = "From ".$row['apply_start_date']."<br/> To ".$row['apply_end_date'];
+					$row1[18] = $row['program_code'];
+					$row1['program_code'] = $row['program_code'];
+					$row1[19] = $row['template_code'];
+					$row1['template_code'] = $row['template_code'];
+					$row1[20] = $row['program_group'];
+					$row1['program_group'] = $row['program_group'];
+					$row1[21] = $row['elective_subjects'];
+					$row1['elective_subjects'] = $row['elective_subjects'];
+					$row1[22] = $row['sequence_code'];
+					$row1['sequence_code'] = $row['sequence_code'];
+					$row1[23] = $row['sequence_no'];
+					$row1['sequence_no'] = $row['sequence_no'];
+					$row1[24] = $row['birth_start_date'];
+					$row1['birth_start_date'] = $row['birth_start_date'];
+					$row1[25] = $row['birth_end_date'];
+					$row1['birth_end_date'] = $row['birth_end_date'];
+					$row1[26] = $row['admitcard_start_date'];
+					$row1['admitcard_start_date'] = $row['admitcard_start_date'];
+					$row1[27] = $row['admitcard_end_date'];
+					$row1['admitcard_end_date'] = $row['admitcard_end_date'];
+					$row1[28] = $row['reg_template_code'];
+					$row1['reg_template_code'] = $row['reg_template_code'];
+					$row1[29] = $row['status'];
+					$row1['status'] = $row['status'];
+					$reg_file_name = $row['reg_file_name'];
+					if($reg_file_name != ''){
+						$view_reg_file = explode(".", $reg_file_name);
+						$reg_file_name = $view_reg_file[0]; // piece1
+						$reg_file_name = "view-".$reg_file_name.".".$view_reg_file[1];
+						$row1[30] = $reg_file_name;
+					}
+					else{
+						$row1[30] = $reg_file_name;
+					}
+					$row1['file_name'] = $reg_file_name;
+					$output['aaData'][] = $row1;
+	                $sl_no++;
+	                unset($row1);
+	            }
+	           	return $output;
+			break;
+			
+			// To get the additional setup data
+			case 'get_program_additional_data':
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+				$this->db->select("A.program_code,program_name,B.classification,B.ministry,B.department,
+				                   B.organisation,pay_scale,age,qualification,desired_qualification,duties,
+				                   probotion_period,head_quarter,other_details");
+				$this->db->from('additional_program_setup B');
+				$this->db->join('program_master A','A.program_code = B.program_code','left');
+				$this->db->where('A.institute_code',$institute_code);
+				$this->db->not_like('A.program_code','PROG');
+				$result = $this->db->get();
+				$this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// to get profile old datatable data //
+			
+			case 'get_program_tableold_data':
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+				$this->db->select("program_group,SUBSTRING_INDEX(program_master.program_code,'_',1) AS progcode,program_name,
+					program_master.YEAR,sl_no,form_template_master.file_name,program_start_date AS p_start_date,registration_template_master.file_name as reg_file_name,
+					program_end_date AS p_end_date,publish_status,online_payment_transaction_no,
+					omr_no,program_master.template_code,program_master.registration_template_code as reg_template_code,
+					apply_start_date AS a_start_date,apply_end_date AS a_end_date,
+					DATE_FORMAT(program_start_date,'%d-%m-%Y') AS program_start_date,
+					DATE_FORMAT(program_end_date,'%d-%m-%Y') AS program_end_date,
+					DATE_FORMAT(apply_start_date,'%d-%m-%Y %h:%i') AS apply_start_date,
+					DATE_FORMAT(apply_end_date,'%d-%m-%Y %h:%i') AS apply_end_date,
+					program_master.program_code,elective_subjects,sequence_code,sequence_no,
+					DATE_FORMAT(birth_start_date,'%d-%m-%Y') AS birth_start_date,
+					DATE_FORMAT(birth_end_date,'%d-%m-%Y') AS birth_end_date,
+					DATE_FORMAT(admitcard_start_date,'%d-%m-%Y') AS admitcard_start_date,
+					DATE_FORMAT(admitcard_end_date,'%d-%m-%Y') AS admitcard_end_date,program_master.status");
+				$this->db->from('program_master');
+				$this->db->join('form_template_master','program_master.template_code = form_template_master.template_code','left');
+				$this->db->join('registration_template_master','program_master.template_code = registration_template_master.template_code','left');
+				$this->db->join('program_eligibility_setup','program_master.program_code = program_eligibility_setup.program_code','left');
+				$this->db->join('index_sequence_setup','program_master.program_code = index_sequence_setup.program_code','left');
+				$this->db->where('program_master.institute_code',$institute_code);
+				$this->db->where('program_master.year',$year);
+				$this->db->where('program_master.record_status','1');
+				$this->db->where('form_template_master.record_status','1');
+				$this->db->where('program_end_date>=',$date);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// to get cmb group names data //
+			
+			case 'select_cmbgroupdata':
+				$this->db->distinct('A.program_group_code, A.program_group_name');
+				$this->db->from('program_group_master A');
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow) 
+	            {
+					$output['aaData'][] = $aRow;
+	                
+	            }
+	           	return $output;
+			break;
+			
+			// to get cmb registration template data //
+			
+			case 'select_cmbtemplatereg_data':
+				$this->db->select('template_code,template_name');
+				$this->db->from('registration_template_master');
+				$this->db->where('record_status','1');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow) 
+	            {
+					$output['aaData'][] = $aRow;
+	                
+	            }
+	           	return $output;
+			break;
+			
+			// to get cmbtemplate data //
+			
+			case 'select_cmbtemplatedata':
+				$this->db->select('template_code,template_name,template_description,file_name,id');
+				$this->db->from('form_template_master');
+				$this->db->where('record_status','1');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow) 
+	            {
+					$output['aaData'][] = $aRow;
+	                
+	            }
+	           	return $output;
+			break;
+			
+			case 'insert_programdata': 
+			 	$dbStatus = "SUCCESS";
+				$dbMessage = "Successfully inserted";
+				$dbError = '';
+            	$dbError = '';
+            	$logged_user_code = '';
+            	$menuInsert = '';
+            	
+            	$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+				$logged_user = $this->session->userdata('user_name');
+				
+				$arr_apply_date = array();
+				$arr_eligible_date = array();
+				$arr_program_date = array();
+            	$txtProgramCode = mt_rand(100,999);
+            	$this->db->select_max('id');
+				$query = $this->db->get('program_master');
+				$output_data = $query->result_array();
+				$sel_id = 0;
+				foreach ($output_data as $aRow) 
+	            {
+	            	$sel_id = $aRow['id'];
+	            }
+	            $txtProgramCode = 'P'.$txtProgramCode.$sel_id;
+				$cmbProgramGroup = $_POST['cmbProgramGroup'];
+				//$cmbProgramGroup = 'APPSC';
+				$taProgramDescription = isset($_POST['taProgramDescription'])?$_POST['taProgramDescription']:'';
+				$txtProgramName = $_POST['txtProgramName'];
+				$txtYear = $_POST['txtYear'];
+				$txtSlno = 1;
+				$txtSeqno = 1;
+				$txtSeqCode = $txtProgramCode;
+				$txtOnlineTransactionNo = 1;
+				$txtOmrNo = $_POST['txtOmrNo'];
+				$cmbRegistrationTemplate = isset($_POST['cmbRegistrationTemplate'])?$_POST['cmbRegistrationTemplate']:'';
+				$cmbTemplate = $_POST['cmbTemplate'];
+				//**************************** CHANGED **********************************
+				$txtStartdate = isset($_POST['txtStartdate'])?$_POST['txtStartdate']:'';
+				$txtEnddate = isset($_POST['txtEnddate'])?$_POST['txtEnddate']:'';
+				$txtAdmitCardStartdate = isset($_POST['txtAdmitCardStartdate'])?$_POST['txtAdmitCardStartdate']:'';
+				$txtAdmitCardEnddate = isset($_POST['txtAdmitCardEnddate'])?$_POST['txtAdmitCardEnddate']:'';
+				$txtAppStartdate = isset($_POST['txtAppStartdate']) && $_POST['txtAppStartdate']!='' ?date('Y-m-d', strtotime($_POST['txtAppStartdate'])):'0000-00-00';
+				$txtAppEnddate = isset($_POST['txtAppEnddate']) && $_POST['txtAppEnddate']!=''?date('Y-m-d', strtotime($_POST['txtAppEnddate'])):'0000-00-00';
+				$txtAgeStartdate = isset($_POST['txtAgeStartdate'])?$_POST['txtAgeStartdate']:'';
+				$txtAgeEnddate = isset($_POST['txtAgeEnddate'])?$_POST['txtAgeEnddate']:'';
+				
+				
+				
+				
+				$program_code = "$txtProgramCode"."_"."$institute_code";
+				$logged_user_code = "$logged_user"."_"."$institute_code";
+				
+			
+				
+			 	$op_type = 'insert_programdata';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$txtYear = date('Y');
+				
+						
+				$output = array();
+				$new_data = array(
+				'program_code' 						=>$program_code,
+				'program_group' 					=>$cmbProgramGroup,
+				'program_name'						=>$txtProgramName, 
+				'program_desc'						=>$taProgramDescription,
+				'year'								=>$txtYear,
+				'sl_no'								=>$txtSlno,
+				'online_payment_transaction_no'		=>$txtOnlineTransactionNo,
+				'omr_no'							=>$txtOmrNo,
+				'registration_template_code'		=>$cmbRegistrationTemplate,
+				'template_code'						=>$cmbTemplate,
+				'program_start_date'				=>date('Y-m-d', strtotime($txtStartdate)),
+				'admitcard_start_date'				=>date('Y-m-d', strtotime($txtAdmitCardStartdate)),
+				'admitcard_end_date'				=>date('Y-m-d', strtotime($txtAdmitCardEnddate)),
+				'program_end_date'					=>date('Y-m-d', strtotime($txtEnddate)),
+				'apply_start_date'					=>$txtAppStartdate,
+				'apply_end_date'					=>$txtAppEnddate,
+				'status'							=>'Active',
+				'institute_code'					=>$institute_code,
+				'created_by'						=>$logged_user_code,
+				'created_on'						=>$date
+				);
+				//print_r($new_data);die();
+				$insert_user =  $this->db->insert('program_master', $new_data);
+				if( ! $insert_user){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+				}
+				if($txtAgeStartdate != '' || $txtAgeEnddate != '')
+				{
+					$new_data1 = array(
+					'program_code' 						=>$program_code,
+					'birth_start_date'                   =>date('Y-m-d', strtotime($txtAgeStartdate)),
+					'birth_END_date'                      =>date('Y-m-d', strtotime($txtAgeEnddate)),
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$insert_user =  $this->db->insert('program_eligibility_setup', $new_data1);
+					/*echo $this->db->last_query();
+					die(); */
+					if(! $insert_user)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+				}
+				if($txtSeqCode != '')
+				{
+					/*$sequence_query = "INSERT INTO index_sequence_setup
+							(program_code,year,sequence_code,sequence_no,institute_code,created_by,created_on)
+						  VALUES('$program_code',$txtYear,'$txtSeqCode',$txtSeqno,
+								'$institute_code','$logged_user',NOW())";
+						*/
+					$new_data = array(
+					'program_code' 						=>$program_code,
+					'year'								=>$txtYear,
+					'sequence_code'						=>$txtSeqCode,
+					'sequence_no'						=>$txtSeqno,
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$insert_user =  $this->db->insert('index_sequence_setup', $new_data); 
+					//echo $this->db->last_query();		
+					if(! $insert_user)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+				}
+						
+				$this->db->select('menu_code,prog_sl_no,record_status,created_by,created_on');
+				$this->db->from('program_menu_master');
+				$this->db->where('record_status','Active');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow1) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'menu_code'							=>$aRow1['menu_code'],
+					'sl_no'								=>$aRow1['prog_sl_no'],
+					'record_status'						=>$aRow1['record_status'],
+					'show_status'						=>'1',
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$menu_Insert =  $this->db->insert('program_menu_setup', $new_data);
+					if(! $menu_Insert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					
+	            }
+				
+				$this->db->select('qualification_code,1,created_by,created_on');
+				$this->db->from('qualification_master');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow2) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'qualification_code'				=>$aRow2['qualification_code'],
+					'record_status'						=>$aRow2['1'],
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$qualificationInsert =  $this->db->insert('program_qualification_setup', $new_data);
+					if(! $qualificationInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					
+	            }		
+	            	
+				$this->db->select('category_code,record_status,created_by,created_on');
+				$this->db->from('category_master');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());		
+				foreach ($output_data as $aRow3) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'category_code'						=>$aRow3['category_code'],
+					'record_status'						=>$aRow3['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					
+					$feeInsert =  $this->db->insert('program_fee_setup', $new_data);
+					if(! $feeInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					$vacInsert =  $this->db->insert('program_vacancy_details', $new_data);
+					if(! $vacInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					
+	            }	
+	            
+				$this->db->select('document_type_code,record_status,created_by,created_on');
+				$this->db->from('document_type_master');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());		
+				foreach ($output_data as $aRow4) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'document_type_code'				=>$aRow4['document_type_code'],
+					'record_status'						=>$aRow4['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$documentInsert =  $this->db->insert('program_document_setup', $new_data);
+					if(! $documentInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					
+	            }
+							
+	           	$this->db->select('sms_type,1,created_by,created_on');
+				$this->db->from('sms_setup');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());		
+				foreach ($output_data as $aRow5) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'sms_type'							=>$aRow5['sms_type'],
+					'record_status'						=>$aRow5['1'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$smsInsert =  $this->db->insert('program_sms_setup', $new_data);
+					if(! $smsInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					
+	            }	
+				$this->db->select('email_type,1,created_by,created_on');
+				$this->db->from('email_setup');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());		
+				foreach ($output_data as $aRow6) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'email_type'						=>$aRow6['email_type'],
+					'record_status'						=>$aRow6['1'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$email_Insert =  $this->db->insert('program_email_setup', $new_data);
+					if(! $email_Insert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					
+	            }
+	            	
+				$this->db->select('category_code,1,created_by,created_on');
+				$this->db->from('category_master');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());		
+				foreach ($output_data as $aRow7) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'category_code'						=>$aRow7['category_code'],
+					'record_status'						=>$aRow7['1'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$categoryInsert =  $this->db->insert('program_category_setup', $new_data);
+					if(! $categoryInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					
+	            }	
+	            				
+	            $this->db->select('code_group,code,created_by,created_on');
+				$this->db->from('registration_field_setup');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());		
+				foreach ($output_data as $aRow8) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'code_group'						=>$aRow8['code_group'],
+					'field_code'						=>$aRow8['code'],
+					'field_status'						=>'COMPULSORY',
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$registrationFieldInsert =  $this->db->insert('program_registration_field_mapping', $new_data);
+					if(! $registrationFieldInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					
+	            }	
+				$output = array('dbStatus'=>$dbStatus,'dbMessage'=>$dbMessage);
+				return $output; 
+			break;
+			case 'insert_additional_data': 
+			 	$dbStatus = "SUCCESS";
+				$dbMessage = "Successfully inserted";
+				$dbError = '';
+            	$dbError = '';
+            	$logged_user_code = '';
+            	$menuInsert = '';
+            	
+            	$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+				$logged_user = $this->session->userdata('user_name');
+				
+				
+	           
+				$program_code = isset($_POST['cmbAdditionalProgram'])?$_POST['cmbAdditionalProgram']:'';
+				$txtClassification = isset($_POST['txtClassification'])?$_POST['txtClassification']:'';
+				$txtMinistry = isset($_POST['txtMinistry'])?$_POST['txtMinistry']:'';
+				$txtDepartment = isset($_POST['txtDepartment'])?$_POST['txtDepartment']:'';
+				$txtOrganisation = isset($_POST['txtOrganisation'])?$_POST['txtOrganisation']:'';
+				$txtPayScale = isset($_POST['txtPayScale'])?$_POST['txtPayScale']:'';
+				$txtAge = isset($_POST['txtAge'])?$_POST['txtAge']:'';
+				$txtEsQualification = isset($_POST['txtEsQualification'])?$_POST['txtEsQualification']:'';
+				$txtDesireQualification = isset($_POST['txtDesireQualification'])?$_POST['txtDesireQualification']:'';
+				$txtDuties = isset($_POST['txtDuties'])?$_POST['txtDuties']:'';
+				$txtProbPeriod = isset($_POST['txtProbPeriod'])?$_POST['txtProbPeriod']:'';
+				$txtHeadQuarter = isset($_POST['txtHeadQuarter'])?$_POST['txtHeadQuarter']:'';
+				$txtOtherDetail = isset($_POST['txtOtherDetail'])?$_POST['txtOtherDetail']:'';
+				$logged_user_code = "$logged_user"."_"."$institute_code";
+			 	$op_type = 'insert_programdata';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+						
+				$output = array();
+				$new_data = array(
+				'program_code' 						=>$program_code,
+				'classification' 					=>$txtClassification,
+				'ministry'							=>$txtMinistry, 
+				'department'						=>$txtDepartment,
+				'organisation'						=>$txtOrganisation,
+				'pay_scale'							=>$txtPayScale,
+				'age'								=>$txtAge,
+				'qualification'						=>$txtEsQualification,
+				'desired_qualification'				=>$txtDesireQualification,
+				'duties'							=>$txtDuties,
+				'probotion_period'					=>$txtProbPeriod,
+				'head_quarter'						=>$txtHeadQuarter,
+				'other_details'						=>$txtOtherDetail,
+				'created_by'						=>$logged_user_code,
+				'created_on'						=>$date
+				);
+				$insert_user =  $this->db->insert('additional_program_setup', $new_data);
+				if( ! $insert_user){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting Additional Setup";
+						$dbError = mysqli_error($con);	
+				}
+					
+				$output = array('dbStatus'=>$dbStatus,'dbMessage'=>$dbMessage);
+				return $output; 
+			break;
+			case 'update_additional_data': 
+			 	$dbStatus = "SUCCESS";
+				$dbMessage = "Successfully updated";
+				$dbError = '';
+            	$dbError = '';
+            	$logged_user_code = '';
+            	$menuInsert = '';
+            	
+            	$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+				$logged_user = $this->session->userdata('user_name');
+				
+				
+	           
+				$program_code = isset($_POST['hidUniqueidAdditional'])?$_POST['hidUniqueidAdditional']:'';
+				$txtClassification = isset($_POST['txtClassification'])?$_POST['txtClassification']:'';
+				$txtMinistry = isset($_POST['txtMinistry'])?$_POST['txtMinistry']:'';
+				$txtDepartment = isset($_POST['txtDepartment'])?$_POST['txtDepartment']:'';
+				$txtOrganisation = isset($_POST['txtOrganisation'])?$_POST['txtOrganisation']:'';
+				$txtPayScale = isset($_POST['txtPayScale'])?$_POST['txtPayScale']:'';
+				$txtAge = isset($_POST['txtAge'])?$_POST['txtAge']:'';
+				$txtEsQualification = isset($_POST['txtEsQualification'])?$_POST['txtEsQualification']:'';
+				$txtDesireQualification = isset($_POST['txtDesireQualification'])?$_POST['txtDesireQualification']:'';
+				$txtDuties = isset($_POST['txtDuties'])?$_POST['txtDuties']:'';
+				$txtProbPeriod = isset($_POST['txtProbPeriod'])?$_POST['txtProbPeriod']:'';
+				$txtHeadQuarter = isset($_POST['txtHeadQuarter'])?$_POST['txtHeadQuarter']:'';
+				$txtOtherDetail = isset($_POST['txtOtherDetail'])?$_POST['txtOtherDetail']:'';
+				$logged_user_code = "$logged_user"."_"."$institute_code";
+			 	$op_type = 'insert_programdata';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+						
+				$output = array();
+				$new_data = array(
+				'classification' 					=>$txtClassification,
+				'ministry'							=>$txtMinistry, 
+				'department'						=>$txtDepartment,
+				'organisation'						=>$txtOrganisation,
+				'pay_scale'							=>$txtPayScale,
+				'age'								=>$txtAge,
+				'qualification'						=>$txtEsQualification,
+				'desired_qualification'				=>$txtDesireQualification,
+				'duties'							=>$txtDuties,
+				'probotion_period'					=>$txtProbPeriod,
+				'head_quarter'						=>$txtHeadQuarter,
+				'other_details'						=>$txtOtherDetail,
+				'created_by'						=>$logged_user_code,
+				'created_on'						=>$date
+				);
+				$this->db->where('program_code',$program_code);
+				$insert_user =  $this->db->update('additional_program_setup', $new_data);
+				if( ! $insert_user){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Updating Additional Setup";
+						$dbError = mysqli_error($con);	
+				}
+					
+				$output = array('dbStatus'=>$dbStatus,'dbMessage'=>$dbMessage);
+				return $output; 
+			break;
+			case 'delete_additional_data': 
+			 	$dbStatus = "SUCCESS";
+				$dbMessage = "Successfully deleted";
+				$dbError = '';
+            	$dbError = '';
+            	$logged_user_code = '';
+            	
+            	$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+				$logged_user = $this->session->userdata('user_name');
+				
+				
+	           
+				$program_code = isset($_POST['hidEmpId'])?$_POST['hidEmpId']:'';
+				
+				$logged_user_code = "$logged_user"."_"."$institute_code";
+			 	$op_type = 'insert_programdata';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+						
+				$output = array();
+				
+				$this->db->where('program_code',$program_code);
+				$delete_user =  $this->db->delete('additional_program_setup');
+				if( ! $delete_user){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Deleting Additional Setup";
+						$dbError = mysqli_error($con);	
+				}
+					
+				$output = array('dbStatus'=>$dbStatus,'dbMessage'=>$dbMessage);
+				return $output; 
+			break;
+			
+			
+			// **************** REGISTRATION SETUP ADDED BY ME**********************************
+			case 'insert_registration_setup':  
+				
+				/*echo "chudghc";
+				die();*/
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+            	$logged_user = $this->session->userdata('user_name');
+            	//$institute_code = $this->session->userdata('institute_code');
+            	$institute_code = $this->session->userdata('institute_code');
+            	$program_code = 'PROG_'.$institute_code;
+            	
+            	$logged_user_code = "$logged_user"."_"."$institute_code";
+            	
+            	$txtRegStart = $_POST['txtRegStart'];
+            	$txtRegEnd = $_POST['txtRegEnd'];
+            	//$txtAppStart = $_POST['txtAppStart'];
+            	//$txtAppEnd = $_POST['txtAppEnd'];
+            	$txtEliFrom = $_POST['txtEliFrom'];
+            	$txtEliUpto = $_POST['txtEliUpto'];
+            	
+			 	/*$txtGroupName = $data['txtGroupName'];
+			 	$cmbtable = $data['cmbtable'];*/
+			 	$data = array( 
+						
+						"program_start_date"  =>date('Y-m-d', strtotime($txtRegStart)),
+						"program_end_date" =>date('Y-m-d', strtotime($txtRegEnd)),
+						//"apply_start_date" =>date('Y-m-d H:i', strtotime($txtAppStart)),
+						//"apply_end_date" =>date('Y-m-d H:i', strtotime($txtAppEnd)),
+						"updated_by" => $logged_user_code,
+						"updated_on" => $date,
+					);
+				$this->db->where('program_code',$program_code);
+				
+				$update_user = $this->db->update('program_master',$data);
+				//echo $this->db->last_query();
+				if(! $update_user){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}
+				
+				$this->db->select("birth_start_date,birth_end_date");
+				$this->db->from('program_eligibility_setup');
+				$this->db->where('program_code',$program_code);
+				$res = $this->db->get();
+			 	$query = $res->result_array();
+				if($res->num_rows() > 0)
+				{
+					$new_data = array(
+					'birth_start_date' 					=>date('Y-m-d', strtotime($txtEliFrom)),
+					'birth_end_date' 					=>date('Y-m-d', strtotime($txtEliUpto)),
+					'created_by'					=>$logged_user_code,
+					'created_on'					=>$date
+					);
+					$this->db->where('program_code',$program_code);
+				
+					$update_user = $this->db->update('program_eligibility_setup',$new_data);
+					//echo $this->db->last_query();
+					if(! $update_user){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+					}
+				}
+				else
+				{
+					
+					$new_data = array(
+					'birth_start_date' 					=>date('Y-m-d', strtotime($txtEliFrom)),
+					'birth_end_date' 					=>date('Y-m-d', strtotime($txtEliUpto)),
+					'program_code'                      =>$program_code,
+					'created_by'					=>$logged_user_code,
+					'created_on'					=>$date
+					);
+					
+					$insert_user =  $this->db->insert('program_eligibility_setup', $new_data);
+					/*echo $this->db->last_query();
+					die();*/
+					if( ! $insert_user){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error While Inserting';
+					}
+				}
+				
+				//$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				/*$insert_group = $this->db->insert('group_master',$data);
+				if( ! $insert_group){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}else{
+					$newarray=array();
+					$insert_group_map =TRUE;
+					for($i = 0;$i < sizeof($cmbtablevalue);$i++)
+					{
+						$newarray[] = array(
+								      'group_code' => $newid ,
+								      'map_value_code' => $cmbtablevalue[$i] ,
+								      'created_by' => 'superadmin',
+									  'created_on' => date('Y-m-d H:i:s', now())
+								   );
+					}
+					if(sizeof($cmbtablevalue) != 0)
+						$insert_group_map = $this->db->insert_batch('group_mapping',$newarray);
+					if( ! $insert_group_map){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+					}
+				}*/
+				//$output = array();
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			
+			
+			case 'get_allDates':
+				$institute_code = $this->session->userdata('institute_code');
+				$program_code = 'PROG_'.$institute_code;
+				
+				$this->db->select("DATE_FORMAT(program_start_date,'%d-%m-%Y') AS program_start_date,
+						DATE_FORMAT(program_end_date,'%d-%m-%Y') AS program_end_date,
+						DATE_FORMAT(apply_start_date,'%d-%m-%Y %h:%i') AS apply_start_date,
+						DATE_FORMAT(apply_end_date,'%d-%m-%Y %h:%i') AS apply_end_date");
+				$this->db->from('program_master');
+				$this->db->where('program_code',$program_code);
+				$result = $this->db->get();
+				return $result1 = $result->result_array();
+			break;
+			case 'get_allDates_eligibility':
+				$institute_code = $this->session->userdata('institute_code');
+				$program_code = 'PROG_'.$institute_code;
+				
+				$this->db->select("DATE_FORMAT(birth_start_date,'%d-%m-%Y') AS birth_start_date,
+				DATE_FORMAT(birth_end_date,'%d-%m-%Y') AS birth_end_date");
+				$this->db->from('program_eligibility_setup');
+				$this->db->where('program_code',$program_code);
+				$result = $this->db->get();
+				return $result1 = $result->result_array();
+			break;
+			
+			
+			// ******************** NEWS AND INFORMATION  AND FAQ*************************************
+			case 'news_events':
+				$this->db->select("id, news_details, type, upload_type, DATE_FORMAT(created_on,'%d-%m-%Y') created_on,link_path");
+				$this->db->from('news_events');
+				//$this->db->where('type', 'NEWS');
+				$this->db->where('record_status', 1);
+				$this->db->order_by('created_on', 'desc');
+				$result = $this->db->get();
+				//echo $this->db->last_query();die();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+		        {
+		            $row[0] = $slno;
+		            $row['sl_no'] = $slno;
+		            $i = 1;
+		            foreach ($aRow as $key => $value) {
+
+		                $row[$i] = $value;
+		                $row[$key] = $value;
+		                $i++;
+		            }
+					$output['aaData'][] = $row;
+		            $slno++;
+		            unset($row);
+		        }
+		       	return $output;
+			break;
+			
+			case 'edit_news_events': 
+				$dbstatus = true;
+	            $dbmessage = 'Data saved successfully'; 
+	            date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$news_events = $this->input->post('txtNewsEvents'); 
+				$txtdate = $this->input->post('txtDate');  
+				$id = $this->input->post('hidid');  
+				$type = $this->input->post('radioType');
+				$logged_user = $this->session->userdata('user_name');
+				$logged_user_code = $this->session->userdata('user_code');
+				$radiobtn = $this->input->post('radioUpload');
+			 	//echo $radiobtn;exit;
+			 	$institute_code = $this->session->userdata('institute_code');
+			  	$link2 = trim($this->input->post('textareaLink'));   
+				$published_date = date('Y-m-d', strtotime($txtdate));
+				$logged_user_code = $this->session->userdata('user_code'); 
+				$output = array();
+				if($radiobtn == 'PDF')
+				{ 
+			 		$link_name = $_FILES['filePdf']['name'];
+				
+					//$pdfFileType = end((explode(".", $_FILES['filePdf']['name'])));
+					$doc_name= explode(".",$_FILES['filePdf']['name']);
+					$pdfFileType = strtolower(end($doc_name));
+					//echo $pdfFileType;
+					/*$uploaddir = FCPATH.'/downloads/latest_info';
+					$retrievedir = 'downloads/latest_info';*/
+					$uploaddir = DOCUMENT_UPLOAD_URL.'/'.$institute_code;
+					$retrievedir = BASE_ADM_URL.'/'.$institute_code;
+					$docPdfFileName = str_replace(' ', '_',$link_name);
+					$docPdfPath = $retrievedir."/".$docPdfFileName;
+					/*echo $retrievedir;
+					echo $docPdfFileName;
+					die();*/
+							
+							
+					if(!is_dir($uploaddir)){
+						mkdir($uploaddir,0777,true);
+					}
+						
+					$config['upload_path'] = $uploaddir; 
+					/*print_r($config);
+					die();*/
+					$config['file_name'] = str_replace(' ', '_',$link_name);
+					$config['allowed_types'] = 'pdf';
+					$config['overwrite'] = TRUE;
+						        
+					$this->load->library('upload', $config);
+					$this->upload->initialize($config);   
+					
+					if (!$this->upload->do_upload('filePdf'))
+					{   	//echo 'if';die();
+						$error = $this->upload->display_errors();
+						$dbstatus = FALSE;
+						$dbmessage = $error;
+					}
+					else
+					{
+						$new_data = array(
+							'news_details' 			=>$news_events,
+							'type'					=>$type,
+							'upload_type'			=>$radiobtn,
+							'link_path'				=>$docPdfPath,
+							'updated_by'			=>$logged_user_code,
+							'updated_on'			=>$date
+						);
+						$this->db->where('id',$id );
+						$this->db->update('news_events', $new_data);
+						if($this->db->affected_rows() ==0){
+							$dbstatus = false;
+							$dbmessage = 'Error While Saving';
+						}
+					}
+				}
+				else
+				{
+					$new_data = array(
+							'news_details' 			=>$news_events,
+							'type'					=>$type,
+							'upload_type'			=>$radiobtn,
+							'link_path'				=>$link2,
+							'updated_by'			=>$logged_user_code,
+							'updated_on'			=>$date
+						);
+						$this->db->where('id',$id );
+						$this->db->update('news_events', $new_data);
+						if($this->db->affected_rows() ==0){
+							$dbstatus = false;
+							$dbmessage = 'Error While Saving';
+						}
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'delete_news_events':  
+			
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Deleted Successfully";
+				$dbError = "";
+				
+				$id = $_POST['id'];
+				$logged_user_code = $this->session->userdata('user_code');
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$update_data = array(
+				'updated_by'	=>$logged_user_code,
+				'updated_on'	=>$date,
+				'record_status' =>0
+				);
+				$this->db->where('id', $id);
+				$this->db->update('news_events', $update_data);
+				
+				if($this->db->affected_rows() ==0){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Deleting";
+				}
+				$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+				
+				return $output; 
+			break;
+			
+			case 'add_news_events':
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				//$type = 'NEWS';
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	//print_r($_POST);
+            	$institute_code = $this->session->userdata('institute_code');
+			 	$news_events = $this->input->post('txtNewsEvents'); 
+				$txtdate = $this->input->post('txtDate');  
+				$id = $this->input->post('hidid');
+				$type = $this->input->post('radioType'); 
+			 	$radiobtn = $this->input->post('radioUpload');
+			 	//echo $radiobtn;exit;
+			  	$link2 = trim($this->input->post('textareaLink'));   
+				$published_date = date('Y-m-d', strtotime($txtdate));
+				$logged_user_code = $this->session->userdata('user_code'); 
+			 	$link_name="";
+				$output = array();
+				if($radiobtn == 'PDF')
+				{
+					$link_name = $_FILES['filePdf']['name'];
+					//$pdfFileType = end((explode(".", $_FILES['filePdf']['name'])));
+					$doc_name= explode(".",$_FILES['filePdf']['name']);
+					$pdfFileType = strtolower(end($doc_name));
+					//echo $pdfFileType;
+					/*$uploaddir = FCPATH.'/downloads/latest_info';
+					$retrievedir = 'downloads/latest_info';*/
+					$uploaddir = DOCUMENT_UPLOAD_URL.'/'.$institute_code;
+					$retrievedir = BASE_ADM_URL.'/'.$institute_code;
+					$docPdfFileName = str_replace(' ', '_',$link_name);
+					$docPdfPath = $retrievedir."/".$docPdfFileName;
+					/*echo $retrievedir;
+					echo $docPdfFileName;
+					die();*/
+							
+							
+					if(!is_dir($uploaddir)){
+						mkdir($uploaddir,0777,true);
+					}
+						
+					$config['upload_path'] = $uploaddir; 
+					/*print_r($config);
+					die();*/
+					$config['file_name'] = str_replace(' ', '_',$link_name);
+					$config['allowed_types'] = 'pdf';
+					$config['overwrite'] = TRUE;
+						        
+					$this->load->library('upload', $config);
+					$this->upload->initialize($config);   
+					
+					if (!$this->upload->do_upload('filePdf'))
+					{   	//echo 'if';die();
+						$error = $this->upload->display_errors();
+						$dbstatus = FALSE;
+						$dbmessage = $error;
+					}
+					else
+					{
+						$new_data = array(
+							//'id' =>$max_id,
+							'news_details' 			=>$news_events,
+							'type'					=>$type,
+							'upload_type'			=>$radiobtn,
+							'link_path'				=>$docPdfPath,
+							'institute_code'		=>$institute_code,
+							'created_by'			=>$logged_user_code,
+							'created_on'			=>$date
+							);
+						$insert_news =  $this->db->insert('news_events', $new_data);
+						if( ! $insert_news){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error While Saving';
+						}	
+					}
+				}
+				else
+				{
+					$new_data = array(
+							//'id' =>$max_id,
+							'news_details' 			=>$news_events,
+							'type'					=>$type,
+							'upload_type'			=>$radiobtn,
+							'link_path'				=>$link2,
+							'institute_code'		=>$institute_code,
+							'created_by'			=>$logged_user_code,
+							'created_on'			=>$date
+							);
+						$insert_news =  $this->db->insert('news_events', $new_data);
+						if( ! $insert_news){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error While Saving';
+						}	
+				}
+				//$this->db->last_query();
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			
+			case 'get_faq':
+				//echo("dhgdfh");die();
+				$this->db->select("id, question, answer");
+				$this->db->from('faq_setup');
+				//$this->db->where('type', 'NEWS');
+				$this->db->where('record_status', 1);
+				$this->db->order_by('created_on', 'desc');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+		        {
+		            $row[0] = $slno;
+		            $row['sl_no'] = $slno;
+		            $i = 1;
+		            foreach ($aRow as $key => $value) {
+
+		                $row[$i] = $value;
+		                $row[$key] = $value;
+		                $i++;
+		            }
+					$output['aaData'][] = $row;
+		            $slno++;
+		            unset($row);
+		        }
+		       	return $output;
+			break;
+			
+			case 'edit_faq': 
+				$dbstatus = true;
+	            $dbmessage = 'Data saved successfully'; 
+	            
+				$txtQues = $this->input->post('txtQues'); 
+				$txtAns = $this->input->post('txtAns');   
+				$id = $this->input->post('hidid');  
+				$logged_user = $this->session->userdata('user_name');
+				$logged_user_code = $this->session->userdata('user_code');
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+					
+				$new_data = array(
+					'question' 			=>$txtQues,
+					'answer'			=>$txtAns,
+					'updated_by'		=>$logged_user_code,
+					'updated_on'		=>$date
+				);
+				$this->db->where('id',$id );
+				$this->db->update('faq_setup', $new_data);
+				if($this->db->affected_rows() ==0){
+					$dbstatus = false;
+					$dbmessage = 'Error While Saving';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'delete_faq':  
+			
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Deleted Successfully";
+				$dbError = "";
+				
+				$id = $_POST['id'];
+				$logged_user_code = $this->session->userdata('user_code');
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$update_data = array(
+				'updated_by'	=>$logged_user_code,
+				'updated_on'	=>$date,
+				'record_status' =>0
+				);
+				$this->db->where('id', $id);
+				$this->db->update('faq_setup', $update_data);
+				
+				if($this->db->affected_rows() ==0){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Deleting";
+				}
+				$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+				
+				return $output; 
+			break;
+			
+			case 'add_faq':
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				//$type = 'NEWS';
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	//print_r($_POST);
+            	$institute_code = $this->session->userdata('institute_code');
+			 	$txtQues = $this->input->post('txtQues'); 
+				$txtAns = $this->input->post('txtAns');   
+				$id = $this->input->post('hidid');
+				$logged_user_code = $this->session->userdata('user_code'); 
+			 	
+				$output = array();
+				$new_data = array(
+					//'id' =>$max_id,
+					'question' 			=>$txtQues,
+					'answer'			=>$txtAns,
+					'institute_code'	=>$institute_code,
+					'created_by'		=>$logged_user_code,
+					'created_on'		=>$date
+					);
+				$insert_news =  $this->db->insert('faq_setup', $new_data);
+				if( ! $insert_news){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}	
+				//$this->db->last_query();
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			//--------------------------------------------------------------
+			case 'get_chairman':
+				//echo("dhgdfh");die();
+				$this->db->select("id, name, message,profile_photo");
+				$this->db->from('chairman_setup');
+				//$this->db->where('type', 'NEWS');
+				$this->db->where('record_status', 1);
+				$this->db->order_by('created_on', 'desc');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+		        {
+		            $row[0] = $slno;
+		            $row['sl_no'] = $slno;
+		            $i = 1;
+		            foreach ($aRow as $key => $value) {
+
+		                $row[$i] = $value;
+		                $row[$key] = $value;
+		                $i++;
+		            }
+					$output['aaData'][] = $row;
+		            $slno++;
+		            unset($row);
+		        }
+		       	return $output;
+			break;
+			
+			case 'edit_chairman': 
+				$dbstatus = true;
+	            $dbmessage = 'Data saved successfully'; 
+	            
+				$txtName = $this->input->post('txtName'); 
+				$txtMessage = $this->input->post('txtMessage');   
+				$id = $this->input->post('hidid');  
+				$logged_user = $this->session->userdata('user_name');
+				$logged_user_code = $this->session->userdata('user_code');
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				if(isset($_FILES['fileInstituteImage']['tmp_name']) && !empty($_FILES['fileInstituteImage']['tmp_name']))
+				{
+					$imageFileType = explode(".", $_FILES['fileInstituteImage']['name'])[1];
+					$check = getimagesize($_FILES["fileInstituteImage"]["tmp_name"]);
+					if($check !== false) {
+
+					} 
+					else 
+					{
+						return array('status'=>false, 'msg'=>"Not an Image");
+					}
+					// Check file size
+					if($_FILES["fileInstituteImage"]["size"] > 1536000) {
+						return array('status'=>false, 'msg'=>"Size of the image should be within 1MB");
+					}
+					// Allow certain file formats
+					if($imageFileType != "jpg" && $imageFileType != "png" && $imageFileType != "jpeg" ) {
+						return array('status'=>false, 'msg'=>"Supported file types are jpg/png/jpeg/gif");
+					}
+					if(isset($_FILES['fileInstituteImage']['tmp_name']) && !empty($_FILES['fileInstituteImage']['tmp_name'])){
+					//$image_name = base64_encode(file_get_contents($_FILES['fileInstituteImage']['tmp_name']));
+					//$pic_name = $this->session->userdata('user_id')."1".time().".png";//$_FILES['fileInstituteImage']['name'];
+					$img_file_name = $txtName.".".$imageFileType;//$_FILES['fileInstituteImage']['name'];
+					$create_dir = FCPATH."public/assets/images/chairman_photo/";
+					if(!is_dir($create_dir))
+						mkdir($create_dir,0777,true);
+					
+					$uploads_dir = BASE_URL."public/assets/images/chairman_photo/".$img_file_name;
+					$upload_dir = $create_dir.$img_file_name;
+					//echo $uploads_dir. base_url('public');
+					$result = move_uploaded_file($_FILES['fileInstituteImage']['tmp_name'], $upload_dir);
+					
+					//echo "PHoto upload status".$result.dirname(__FILE__) ;
+					//echo FCPATH."#".APPPATH."##".BASEPATH;
+					//die();
+					}
+				}
+				else
+				{
+					$img_file_name = '';
+				}	
+				$new_data = array(
+					'name' 				=>$txtName,
+					'message'			=>$txtMessage,
+					'profile_photo'		=>$uploads_dir,
+					'updated_by'		=>$logged_user_code,
+					'updated_on'		=>$date
+				);
+				$this->db->where('id',$id );
+				$this->db->update('chairman_setup', $new_data);
+				if($this->db->affected_rows() ==0){
+					$dbstatus = false;
+					$dbmessage = 'Error While Saving';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'delete_chairman':  
+			
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Deleted Successfully";
+				$dbError = "";
+				
+				$id = $_POST['id'];
+				$logged_user_code = $this->session->userdata('user_code');
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$update_data = array(
+				'updated_by'	=>$logged_user_code,
+				'updated_on'	=>$date,
+				'record_status' =>0
+				);
+				$this->db->where('id', $id);
+				$this->db->update('chairman_setup', $update_data);
+				
+				if($this->db->affected_rows() ==0){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Deleting";
+				}
+				$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+				
+				return $output; 
+			break;
+			
+			case 'add_chairman':
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				//$type = 'NEWS';
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	//print_r($_POST);
+            	$institute_code = $this->session->userdata('institute_code');
+			 	$txtName = $this->input->post('txtName'); 
+				$txtMessage = $this->input->post('txtMessage'); 
+				$id = $this->input->post('hidid');
+				
+				$logged_user_code = $this->session->userdata('user_code'); 
+				if(isset($_FILES['fileInstituteImage']['tmp_name']) && !empty($_FILES['fileInstituteImage']['tmp_name']))
+				{
+					$imageFileType = explode(".", $_FILES['fileInstituteImage']['name'])[1];
+					$check = getimagesize($_FILES["fileInstituteImage"]["tmp_name"]);
+					if($check !== false) {
+
+					} 
+					else 
+					{
+						return array('status'=>false, 'msg'=>"Not an Image");
+					}
+					// Check file size
+					if($_FILES["fileInstituteImage"]["size"] > 1536000) {
+						return array('status'=>false, 'msg'=>"Size of the image should be within 1MB");
+					}
+					// Allow certain file formats
+					if($imageFileType != "jpg" && $imageFileType != "png" && $imageFileType != "jpeg" ) {
+						return array('status'=>false, 'msg'=>"Supported file types are jpg/png/jpeg/gif");
+					}
+					if(isset($_FILES['fileInstituteImage']['tmp_name']) && !empty($_FILES['fileInstituteImage']['tmp_name'])){
+					//$image_name = base64_encode(file_get_contents($_FILES['fileInstituteImage']['tmp_name']));
+					//$pic_name = $this->session->userdata('user_id')."1".time().".png";//$_FILES['fileInstituteImage']['name'];
+					$img_file_name = $txtName.".".$imageFileType;//$_FILES['fileInstituteImage']['name'];
+					$create_dir = FCPATH."public/assets/images/chairman_photo/";
+					if(!is_dir($create_dir))
+						mkdir($create_dir,0777,true);
+					
+					$upload_dir = FCPATH."public/assets/images/chairman_photo/".$img_file_name;
+					$uploads_dir = BASE_URL."public/assets/images/chairman_photo/".$img_file_name;
+					//echo $uploads_dir. base_url('public');
+					$result = move_uploaded_file($_FILES['fileInstituteImage']['tmp_name'], $upload_dir);
+					//echo "PHoto upload status".$result.dirname(__FILE__) ;
+					//echo FCPATH."#".APPPATH."##".BASEPATH;
+					//die();
+					}
+				}
+				else
+				{
+					$img_file_name = '';
+				}
+			 	
+				$output = array();
+				$new_data = array(
+					//'id' =>$max_id,
+					'name' 			=>$txtName,
+					'message'			=>$txtMessage,
+					'profile_photo'		=>$uploads_dir,
+					'institute_code'	=>$institute_code,
+					'created_by'		=>$logged_user_code,
+					'created_on'		=>$date
+					);
+				$insert_news =  $this->db->insert('chairman_setup', $new_data);
+				if( ! $insert_news){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}	
+				//$this->db->last_query();
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			//--------------------------------------------------------------
+			case 'get_telephony':
+				//echo("dhgdfh");die();
+				$this->db->select("id, name, designation,office_no,mobile_no");
+				$this->db->from('telephony_setup');
+				//$this->db->where('type', 'NEWS');
+				$this->db->where('record_status', 1);
+				$this->db->order_by('created_on', 'desc');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+		        {
+		            $row[0] = $slno;
+		            $row['sl_no'] = $slno;
+		            $i = 1;
+		            foreach ($aRow as $key => $value) {
+
+		                $row[$i] = $value;
+		                $row[$key] = $value;
+		                $i++;
+		            }
+					$output['aaData'][] = $row;
+		            $slno++;
+		            unset($row);
+		        }
+		       	return $output;
+			break;
+			case 'add_telephony':
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				//$type = 'NEWS';
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	//print_r($_POST);
+            	$institute_code = $this->session->userdata('institute_code');
+			 	$txtName = $this->input->post('txtName'); 
+				$txtDesg = $this->input->post('txtDesg');   
+				$txtOffice = $this->input->post('txtOffice');   
+				$txtMobile = $this->input->post('txtMobile');   
+				$id = $this->input->post('hidid');
+				$logged_user_code = $this->session->userdata('user_code'); 
+			 	
+				$output = array();
+				$new_data = array(
+					//'id' =>$max_id,
+					'name' 				=>$txtName,
+					'designation'		=>$txtDesg,
+					'office_no'			=>$txtOffice,
+					'mobile_no'			=>$txtMobile,
+					'institute_code'	=>$institute_code,
+					'created_by'		=>$logged_user_code,
+					'created_on'		=>$date
+					);
+				$insert_news =  $this->db->insert('telephony_setup', $new_data);
+				if( ! $insert_news){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}	
+				//$this->db->last_query();
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			case 'edit_telephony': 
+				$dbstatus = true;
+	            $dbmessage = 'Data saved successfully'; 
+	            
+				$txtName = $this->input->post('txtName'); 
+				$txtDesg = $this->input->post('txtDesg');   
+				$txtOffice = $this->input->post('txtOffice');   
+				$txtMobile = $this->input->post('txtMobile');   
+				$id = $this->input->post('hidid');  
+				$logged_user = $this->session->userdata('user_name');
+				$logged_user_code = $this->session->userdata('user_code');
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+					
+				$new_data = array(
+					'name' 				=>$txtName,
+					'designation'		=>$txtDesg,
+					'office_no'			=>$txtOffice,
+					'mobile_no'			=>$txtMobile,
+					'updated_by'		=>$logged_user_code,
+					'updated_on'		=>$date
+				);
+				$this->db->where('id',$id );
+				$this->db->update('telephony_setup', $new_data);
+				if($this->db->affected_rows() ==0){
+					$dbstatus = false;
+					$dbmessage = 'Error While Saving';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'delete_telephony':  
+			
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Deleted Successfully";
+				$dbError = "";
+				
+				$id = $_POST['id'];
+				$logged_user_code = $this->session->userdata('user_code');
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$update_data = array(
+				'updated_by'	=>$logged_user_code,
+				'updated_on'	=>$date,
+				'record_status' =>0
+				);
+				$this->db->where('id', $id);
+				$this->db->update('telephony_setup', $update_data);
+				
+				if($this->db->affected_rows() ==0){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Deleting";
+				}
+				$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+				
+				return $output; 
+			break;
+			//--------------------------------------------------------------------
+			
+			case 'latest_information':
+				$this->db->select("id, link_name, CASE WHEN link_path = '#' THEN link_description ELSE link_path END AS link,  DATE_FORMAT(created_on,'%d-%m-%Y') AS date, link_path");
+				$this->db->from('latest_information');
+				$this->db->where('record_status', 1);
+				$this->db->order_by('created_on', 'desc');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				//print_r($output_data);exit;
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+		        {
+		            $row[0] = $slno;
+		            $row['sl_no'] = $slno;
+		            $i = 1;
+		            foreach ($aRow as $key => $value) {
+
+		                $row[$i] = $value;
+		                $row[$key] = $value;
+		                $i++;
+		            }
+					$output['aaData'][] = $row;
+		            $slno++;
+		            unset($row);
+		        }
+		        //print_r($output);exit;
+		       	return $output;
+			break;
+			case 'edit_latest_information': 
+				$dbstatus = true;
+	            $dbmessage = 'Data saved successfully'; 
+	            
+				$link_name = $this->input->post('txtLinkName');
+				$radiobtn = $this->input->post('radioUpload');
+			 	$link2 = trim($this->input->post('textareaLink')); 
+				//$txtdate = $this->input->post('txtInfoDate');  
+				$id = $this->input->post('hidInfoid');
+				//$type = $this->input->post('radioType');
+				$logged_user = $this->session->userdata('user_name');
+				$logged_user_code = $this->session->userdata('user_code');	
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				if($radiobtn == 'PDF')
+				{
+					//$pdfFileType = end((explode(".", $_FILES['filePdf']['name'])));
+					$doc_name= explode(".",$_FILES['filePdf']['name']);
+					$pdfFileType = strtolower(end($doc_name));
+					$uploaddir = FCPATH.'/downloads/latest_info';
+					$retrievedir = 'downloads/latest_info';
+					$docPdfFileName = str_replace(' ', '_',$link_name).'.'.$pdfFileType;
+					$docPdfPath = $retrievedir."/".$docPdfFileName;
+							
+					if(!is_dir($uploaddir)){
+						mkdir($uploaddir,0777,true);
+					}
+						
+					$config['upload_path'] = $uploaddir; 
+					$config['file_name'] = str_replace(' ', '_',$link_name);
+					$config['allowed_types'] = 'pdf';
+					$config['overwrite'] = TRUE;
+						        
+					$this->load->library('upload', $config);
+					$this->upload->initialize($config);   
+					//echo $docPdfPath;exit;
+					if (!$this->upload->do_upload('filePdf'))
+					{   	//echo 'if';die();
+						$error = $this->upload->display_errors();
+						$dbstatus = FALSE;
+						$dbmessage = $error;
+					}
+					else
+					{
+						$new_data = array(
+							//'id' =>$max_id,
+							'link_name' 		=>$link_name,
+							'link_path'			=>$docPdfPath,
+							'link_description'	=>"",
+							'updated_by'		=>$logged_user_code,
+							'updated_on'		=>$date
+							);
+						$this->db->where('id',$id );
+						$this->db->update('latest_information', $new_data);
+						if($this->db->affected_rows() ==0){
+							$dbstatus = false;
+							$dbmessage = 'Error While Saving';
+						} 
+					}
+				}
+				else
+				{
+					$new_data = array(
+							//'id' =>$max_id,
+							'link_name' 		=>$link_name,
+							'link_path'			=>"#",
+							'link_description'	=>$link2,
+							'updated_by'		=>$logged_user_code,
+							'updated_on'		=>$date
+							);
+					$this->db->where('id',$id );
+					$this->db->update('latest_information', $new_data);
+					if($this->db->affected_rows() ==0){
+						$dbstatus = false;
+						$dbmessage = 'Error While Saving';
+					}		
+				//print_r($new_data);exit;
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'delete_latest_information':  
+			
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Deleted Successfully";
+				$dbError = "";
+				
+				$id = $_POST['id'];
+				$logged_user_code = $this->session->userdata('user_code');
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$update_data = array(
+				'updated_by'	=>$logged_user_code,
+				'updated_on'	=>$date,
+				'record_status' =>0
+				);
+				$this->db->where('id', $id);
+				$this->db->update('latest_information', $update_data);
+				
+				if($this->db->affected_rows() ==0){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Deleting";
+				}
+				$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+				
+				return $output; 
+			break;
+			
+			case 'add_latest_information':
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	//print_r($_POST);
+            	$institute_code = $this->session->userdata('institute_code');
+			 	$link_name = $this->input->post('txtLinkName'); 
+			 	//$txtdate = $this->input->post('txtInfoDate');
+			 	$radiobtn = $this->input->post('radioUpload');
+			 	//echo $radiobtn;exit;
+			  	$link2 = trim($this->input->post('textareaLink')); 
+			 	//echo $link2;exit;
+				 
+				$logged_user_code = $this->session->userdata('user_code');	
+				$output = array();
+				$new_link='#';
+				if($radiobtn == 'PDF')
+				{
+					//$pdfFileType = end((explode(".", $_FILES['filePdf']['name'])));
+					$doc_name= explode(".",$_FILES['filePdf']['name']);
+					$pdfFileType = strtolower(end($doc_name));
+					//echo $pdfFileType;
+					/*$uploaddir = FCPATH.'/downloads/latest_info';
+					$retrievedir = 'downloads/latest_info';*/
+					$uploaddir = DOCUMENT_UPLOAD_URL.'/'.$institute_code;
+					$retrievedir = BASE_ADM_URL.'/'.$institute_code;
+					$docPdfFileName = str_replace(' ', '_',$link_name).'.'.$pdfFileType;
+					$docPdfPath = $retrievedir."/".$docPdfFileName;
+					/*echo $retrievedir;
+					echo $docPdfFileName;
+					die();*/
+							
+							
+					if(!is_dir($uploaddir)){
+						mkdir($uploaddir,0777,true);
+					}
+						
+					$config['upload_path'] = $uploaddir; 
+					/*print_r($config);
+					die();*/
+					$config['file_name'] = str_replace(' ', '_',$link_name);
+					$config['allowed_types'] = 'pdf';
+					$config['overwrite'] = TRUE;
+						        
+					$this->load->library('upload', $config);
+					$this->upload->initialize($config);   
+					
+					if (!$this->upload->do_upload('filePdf'))
+					{   	//echo 'if';die();
+						$error = $this->upload->display_errors();
+						$dbstatus = FALSE;
+						$dbmessage = $error;
+					}
+					else
+					{
+						$new_data = array(
+							//'id' =>$max_id,
+							'link_name' 		=>$link_name,
+							'link_path'			=>$docPdfPath,
+							'link_description'	=>' ',
+							'institute_code'=>$institute_code,
+							'created_by'		=>$logged_user_code,
+							'created_on'		=>$date
+							);
+						$insert_info_path =  $this->db->insert('latest_information', $new_data);
+						if( ! $insert_info_path){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error While Saving';
+						}	
+						//$this->db->last_query();
+					}
+				}
+				else{
+					
+					$new_data = array(
+							//'id' =>$max_id,
+							'link_name' 		=>$link_name,
+							'link_path'  		=>$new_link,
+							'link_description'	=>$link2,
+							'institute_code'=>$institute_code,
+							'created_by'		=>$logged_user_code,
+							'created_on'		=>$date
+							);
+					$insert_info =  $this->db->insert('latest_information', $new_data);
+					if( ! $insert_info){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+					}	
+					$this->db->last_query();
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+				
+			break;
+			case 'get_prev_ques':
+				$this->db->select("id, ques_set,  link_path AS link, link_path");
+				$this->db->from('previous_ques_setup');
+				$this->db->where('record_status', 1);
+				$this->db->order_by('created_on', 'desc');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				//print_r($output_data);exit;
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+		        {
+		            $row[0] = $slno;
+		            $row['sl_no'] = $slno;
+		            $i = 1;
+		            foreach ($aRow as $key => $value) {
+
+		                $row[$i] = $value;
+		                $row[$key] = $value;
+		                $i++;
+		            }
+					$output['aaData'][] = $row;
+		            $slno++;
+		            unset($row);
+		        }
+		        //print_r($output);exit;
+		       	return $output;
+			break;
+			case 'edit_prev_ques': 
+				$dbstatus = true;
+	            $dbmessage = 'Data saved successfully'; 
+	            
+				$txtQuesSet = $this->input->post('txtQuesSet');
+				//$txtdate = $this->input->post('txtInfoDate');  
+				$id = $this->input->post('hidInfoid');
+				//$type = $this->input->post('radioType');
+				$logged_user = $this->session->userdata('user_name');
+				$logged_user_code = $this->session->userdata('user_code');	
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				//$pdfFileType = end((explode(".", $_FILES['filePdf']['name'])));
+					$doc_name= explode(".",$_FILES['filePdf']['name']);
+					$pdfFileType = strtolower(end($doc_name));
+				/*	$uploaddir = FCPATH.'/downloads/latest_info';*/
+					$retrievedir = BASE_ADM_URL.'/'.$institute_code;
+					$uploaddir = DOCUMENT_UPLOAD_URL.'/'.$institute_code;
+					$docPdfFileName = str_replace(' ', '_',$txtQuesSet).'.'.$pdfFileType;
+					$docPdfPath = $retrievedir."/".$docPdfFileName;
+							
+					if(!is_dir($uploaddir)){
+						mkdir($uploaddir,0777,true);
+					}
+						
+					$config['upload_path'] = $uploaddir; 
+					$config['file_name'] = str_replace(' ', '_',$txtQuesSet);
+					$config['allowed_types'] = 'pdf';
+					$config['overwrite'] = TRUE;
+						        
+					$this->load->library('upload', $config);
+					$this->upload->initialize($config);   
+					//echo $docPdfPath;exit;
+					if (!$this->upload->do_upload('filePdf'))
+					{   	//echo 'if';die();
+						$error = $this->upload->display_errors();
+						$dbstatus = FALSE;
+						$dbmessage = $error;
+					}
+					else
+					{
+						$new_data = array(
+							//'id' =>$max_id,
+							'ques_set' 			=>$txtQuesSet,
+							'link_path'			=>$docPdfPath,
+							'updated_by'		=>$logged_user_code,
+							'updated_on'		=>$date
+							);
+						$this->db->where('id',$id );
+						$this->db->update('previous_ques_setup', $new_data);
+						if($this->db->affected_rows() ==0){
+							$dbstatus = false;
+							$dbmessage = 'Error While Saving';
+						} 
+					}
+				
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			case 'delete_prev_ques':  
+			
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Deleted Successfully";
+				$dbError = "";
+				
+				$id = $_POST['id'];
+				$logged_user_code = $this->session->userdata('user_code');
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$update_data = array(
+				'updated_by'	=>$logged_user_code,
+				'updated_on'	=>$date,
+				'record_status' =>0
+				);
+				$this->db->where('id', $id);
+				$this->db->update('previous_ques_setup', $update_data);
+				
+				if($this->db->affected_rows() ==0){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Deleting";
+				}
+				$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+				
+				return $output; 
+			break;
+			
+			case 'add_prev_ques':
+				date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$dbstatus = TRUE;
+            	$dbmessage = 'Data saved successfully';
+            	//print_r($_POST);
+            	$institute_code = $this->session->userdata('institute_code');
+			 	$txtQuesSet = $this->input->post('txtQuesSet');
+				 
+				$logged_user_code = $this->session->userdata('user_code');	
+				$output = array();
+				
+					//$pdfFileType = end((explode(".", $_FILES['filePdf']['name'])));
+					$doc_name= explode(".",$_FILES['filePdf']['name']);
+					$pdfFileType = strtolower(end($doc_name));
+					//echo $pdfFileType;
+					/*$uploaddir = FCPATH.'/downloads/latest_info';
+					$retrievedir = 'downloads/latest_info';*/
+					$uploaddir = DOCUMENT_UPLOAD_URL.'/'.$institute_code;
+					$retrievedir = BASE_ADM_URL.'/'.$institute_code;
+					$docPdfFileName = str_replace(' ', '_',$txtQuesSet).'.'.$pdfFileType;
+					$docPdfPath = $retrievedir."/".$docPdfFileName;
+					/*echo $retrievedir;
+					echo $docPdfFileName;
+					die();*/
+							
+							
+					if(!is_dir($uploaddir)){
+						mkdir($uploaddir,0777,true);
+					}
+						
+					$config['upload_path'] = $uploaddir; 
+					/*print_r($config);
+					die();*/
+					$config['file_name'] = str_replace(' ', '_',$txtQuesSet);
+					$config['allowed_types'] = 'pdf';
+					$config['overwrite'] = TRUE;
+						        
+					$this->load->library('upload', $config);
+					$this->upload->initialize($config);   
+					
+					if (!$this->upload->do_upload('filePdf'))
+					{   	//echo 'if';die();
+						$error = $this->upload->display_errors();
+						$dbstatus = FALSE;
+						$dbmessage = $error;
+					}
+					else
+					{
+						$new_data = array(
+							//'id' =>$max_id,
+							'ques_set' 			=>$txtQuesSet,
+							'link_path'			=>$docPdfPath,
+							'institute_code'=>$institute_code,
+							'created_by'		=>$logged_user_code,
+							'created_on'		=>$date
+							);
+						$insert_info_path =  $this->db->insert('previous_ques_setup', $new_data);
+						if( ! $insert_info_path){
+							$dbstatus = FALSE;
+							$dbmessage = 'Error While Saving';
+						}	
+						//$this->db->last_query();
+					}
+		
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+				
+			break;
+			// **************************UPTO THIS*****************************************
+			
+			// to check duplicate program code //
+			case 'CHKDUCPLICATE_data':
+				$dbstatus = '';
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				if($_POST['validateprogramcode'])
+				{
+					$getProgramCode = $_POST['txtProgramCode']."_".$institute_code;
+					
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_master');
+					$this->db->where('program_code',$getProgramCode);
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $aRow) 
+		            {
+						$output['aaData'][] = $aRow['program_code'];
+						$dbstatus = $aRow['program_code'];
+		                
+		            }
+		            $output = array('status'=>$dbstatus);
+		           	return $output;
+				}
+				
+			break;
+			
+			case 'get_program_groupdata':
+				$this->db->distinct('A.program_group_code, A.program_group_name');
+				$this->db->from('program_group_master A');
+				$this->db->order_by(' A.sl_no');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow) 
+	            {
+					$output['aaData'][] = $aRow;
+	                
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_copyformdata':
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$this->db->distinct('program_code');
+				$this->db->select("program_code,CONCAT(program_name,' (',SUBSTRING_INDEX(program_code,'_',1),')') AS program_name,A.sl_no ");
+				$this->db->from('program_master A');
+				$this->db->where('record_status','1');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->order_by(' A.sl_no');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				//echo $this->db->last_query();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow) 
+	            {
+					$output['aaData'][] = $aRow;
+	                
+	            }
+	           	return $output;
+			break;
+			
+			case 'CHKDUCPLICATECOPY_data':
+				$dbstatus = '';
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				if($_POST['validateprogramcode'])
+				{
+					$getProgramCode = $_POST['txtProgramCodeCopy']."_".$institute_code;
+					
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_master');
+					$this->db->where('program_code',$getProgramCode);
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $aRow) 
+		            {
+						$output['aaData'][] = $aRow['program_code'];
+						$dbstatus = $aRow['program_code'];
+		                
+		            }
+		            $output = array('status'=>$dbstatus);
+		           	return $output;
+				}
+				
+			break;
+			
+			case 'insert_copydata': 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Successfully Copied";
+				$dbError = '';
+            	
+            	$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+				$logged_user = $this->session->userdata('user_name');
+            	$cmbProgramGroupCopy = $_POST['cmbProgramGroupCopy'];
+				$txtProgramCodeCopy = $_POST['txtProgramCodeCopy'];
+				$txtProgramNameCopy = $_POST['txtProgramNameCopy'];
+				$cmbCopyFrom = $_POST['cmbCopyFrom'];
+				$txtStartdateCopy = isset($_POST['txtStartdateCopy'])?$_POST['txtStartdateCopy']:'';
+				$txtEnddateCopy = isset($_POST['txtEnddateCopy'])?$_POST['txtEnddateCopy']:'';
+				$txtAppStartdateCopy = $_POST['txtAppStartdateCopy'];
+				$txtAppEnddateCopy = $_POST['txtAppEnddateCopy'];
+				$program_code = $txtProgramCodeCopy."_".$institute_code;
+				$logged_user_code = "$logged_user"."_"."$institute_code";
+				
+			 	//$op_type = 'insert_copydata';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				$this->db->select('program_code,program_group,program_name,elective_subjects,program_desc,program_duration,
+						YEAR,sl_no,online_payment_transaction_no,omr_no,registration_template_code,template_code,
+						program_start_date,program_end_date,
+						apply_start_date,apply_end_date,
+						STATUS');
+				$this->db->from('program_master');
+				$this->db->where('program_group',$cmbProgramGroupCopy);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','1');
+				$this->db->where('institute_code',$institute_code);
+				$result = $this->db->get();
+				
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	            	$resultee = $aRow['elective_subjects'];
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'program_group'						=>$cmbProgramGroupCopy,
+					'program_name'						=>$txtProgramNameCopy,
+					'elective_subjects'					=>$resultee,
+					'program_duration'					=>$aRow['program_duration'],
+					'program_desc'						=>$aRow['program_desc'],
+					'YEAR'								=>$aRow['YEAR'],
+					'sl_no'								=>$aRow['sl_no'],
+					'online_payment_transaction_no'		=>$aRow['online_payment_transaction_no'],
+					'omr_no'							=>$aRow['omr_no'],
+					'registration_template_code'		=>$aRow['registration_template_code'],
+					'template_code'						=>$aRow['template_code'],
+					'program_start_date'				=>$aRow['program_start_date'],
+					'program_end_date'					=>$aRow['program_end_date'],
+					'apply_start_date'					=>$aRow['apply_start_date'],
+					'apply_end_date'					=>$aRow['apply_end_date'],
+					'STATUS'							=>$aRow['STATUS'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date
+					);
+					$insert_user = $this->db->insert('program_master', $new_data);
+					//echo $insert_user;
+					if(! $insert_user)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+					
+				}	
+				$this->db->select('program_code,birth_start_date,birth_END_date,created_by,created_on');
+				$this->db->from('program_eligibility_setup');
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'birth_start_date'					=>$aRow['birth_start_date'],
+					'birth_END_date'					=>$aRow['birth_END_date'],
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					$age_query = $this->db->insert('program_eligibility_setup', $new_data);
+					if(! $age_query)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }
+		        //echo $cmbCopyFrom; 
+				$this->db->select('program_code,YEAR,sequence_code,sequence_no,institute_code,created_by,created_on');
+				$this->db->from('index_sequence_setup');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','1');
+				
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'YEAR'								=>$aRow['YEAR'],
+					'sequence_code'						=>$aRow['sequence_code'],
+					'sequence_no'						=>$aRow['sequence_no'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					
+					$sequence_query = $this->db->insert('index_sequence_setup', $new_data);
+					if(! $sequence_query)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }	
+		            
+				$this->db->select('program_code,menu_code,sl_no,show_status,file_path,file_name,record_status,
+									institute_code,created_by,created_on');
+				$this->db->from('program_menu_setup');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','Active');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'menu_code'							=>$aRow['menu_code'],
+					'sl_no'								=>$aRow['sl_no'],
+					'show_status'						=>$aRow['show_status'],
+					'file_path'							=>$aRow['file_path'],
+					'file_name'							=>$aRow['file_name'],
+					'record_status'						=>$aRow['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					
+					$menuInsert = $this->db->insert('program_menu_setup', $new_data);
+					if(! $menuInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }
+	            
+				$this->db->select('program_code,qualification_code,record_status,created_by,created_on');
+				$this->db->from('program_qualification_setup');
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'qualification_code'				=>$aRow['qualification_code'],
+					'record_status'						=>$aRow['record_status'],
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					
+					$qualificationInsert = $this->db->insert('program_qualification_setup', $new_data);
+					if(! $qualificationInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }	
+	            
+				$this->db->select('program_code,category_code,amount,record_status,institute_code,created_by,created_on');
+				$this->db->from('program_fee_setup');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'category_code'						=>$aRow['category_code'],
+					'amount'							=>$aRow['amount'],
+					'record_status'						=>$aRow['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					
+					$feeInsert = $this->db->insert('program_fee_setup', $new_data);
+					if(! $feeInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }
+	            
+				$this->db->select('program_code,document_type_code,sl_no,record_status,institute_code,created_by,created_on');
+				$this->db->from('program_document_setup');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'document_type_code'				=>$aRow['document_type_code'],
+					'sl_no'								=>$aRow['sl_no'],
+					'record_status'						=>$aRow['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					
+					$documentInsert = $this->db->insert('program_document_setup', $new_data);
+					if(! $documentInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }	
+	            
+				$this->db->select('sms_type,program_code,record_status,institute_code,created_by,created_on');
+				$this->db->from('program_sms_setup');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'sms_type'							=>$aRow['sms_type'],
+					'record_status'						=>$aRow['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					$smsInsert = $this->db->insert('program_sms_setup', $new_data);
+					if(! $smsInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }			
+				
+				$this->db->select('program_code,email_type,record_status,institute_code,created_by,created_on');
+				$this->db->from('program_email_setup');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'email_type'						=>$aRow['email_type'],
+					'record_status'						=>$aRow['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					$emailInsert = $this->db->insert('program_email_setup', $new_data);
+					if(! $emailInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }	
+	            
+	            
+				$this->db->select('program_code,category_code,record_status,institute_code,created_by,created_on');
+				$this->db->from('program_category_setup');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'category_code'						=>$aRow['category_code'],
+					'record_status'						=>$aRow['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					$categoryInsert = $this->db->insert('program_category_setup', $new_data);
+					if(! $categoryInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }			
+						
+				$this->db->select('program_code,code_group,field_code,field_status,institute_code,created_by,created_on,record_status');
+				$this->db->from('program_registration_field_mapping');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'code_group'						=>$aRow['code_group'],
+					'field_code'						=>$aRow['field_code'],
+					'field_status'						=>$aRow['field_status'],
+					'record_status'						=>$aRow['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					$registrationFieldInsert = $this->db->insert('program_registration_field_mapping', $new_data);
+					if(! $registrationFieldInsert)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }	
+	            
+	            
+				$this->db->select('program_code,exam_centre_code,exam_centre_name,record_status,created_by,created_on,record_status');
+				$this->db->from('exam_centre_master');
+				$this->db->where('program_code',$cmbCopyFrom);
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 						=>$program_code,
+					'exam_centre_code'					=>$aRow['exam_centre_code'],
+					'exam_centre_name'					=>$aRow['exam_centre_name'],
+					'record_status'						=>$aRow['record_status'],
+					'institute_code'					=>$institute_code,
+					'created_by'						=>$logged_user_code,
+					'created_on'						=>$date,
+					);
+					$exam_center = $this->db->insert('exam_centre_master', $new_data);
+					if(! $exam_center)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output;*/ 
+	            }	
+	            
+	            $this->db->select('program_code,transaction_charge,status,institute_code,created_by,created_on');
+				$this->db->from('online_transaction_charge_setup');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	                $new_data = array(
+					'program_code' 							=>$program_code,
+					'transaction_charge'					=>$aRow['transaction_charge'],
+					'status'								=>$aRow['status'],
+					'record_status'							=>$aRow['record_status'],
+					'institute_code'						=>$institute_code,
+					'created_by'							=>$logged_user_code,
+					'created_on'							=>$date,
+					);
+					$online_transaction = $this->db->insert('online_transaction_charge_setup', $new_data);
+					if(! $online_transaction)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }
+	            
+	            
+				$bank_code = '';
+	            $this->db->select('bank_code');
+				$this->db->from('challan_detail');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+					$bank_code = $aRow['bank_code'];
+	            }
+	            $challan_code = $program_code.$bank_code;
+	            $this->db->select('program_code,bank_code,bank_name,branch_name,account_no,transaction_charge,
+							status,challan_code,institute_code,created_by,created_on');
+				$this->db->from('challan_detail');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_code',$cmbCopyFrom);
+				$this->db->where('challan_code',$challan_code);
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	               $new_data = array(
+					'program_code' 							=>$program_code,
+					'bank_code'								=>$aRow['bank_code'],
+					'bank_name'								=>$aRow['bank_name'],
+					'branch_name'							=>$aRow['branch_name'],
+					'account_no'							=>$aRow['account_no'],
+					'transaction_charge'					=>$aRow['transaction_charge'],
+					'status'								=>$aRow['status'],
+					'institute_code'						=>$institute_code,
+					'created_by'							=>$logged_user_code,
+					'created_on'							=>$date,
+					);
+					$challan_setup = $this->db->insert('challan_detail', $new_data);
+					if(! $challan_setup)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+					/*$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+					return $output; */
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$dbError);
+					return $output; 
+				}
+				else
+				{
+					$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$dbError);
+					return $output; 
+				}			
+	        break; 
+	        
+	        case 'select_yeardata':
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+					
+				$this->db->distinct('A.year as year');
+				$this->db->select('A.year as year');
+				$this->db->from('program_master A,institute_master B');
+				$this->db->where('B.institute_code',$institute_code);
+				$this->db->where('program_end_date<',$date);
+				$this->db->where(' B.record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow) 
+	            {
+					$output['aaData'][] = $aRow;
+	                
+	            }
+	           	return $output;
+			break;
+			
+			case 'edit_currentdata':
+				$dbstatus = "SUCCESS";
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$arr_apply_date = array();
+				$arr_eligible_date = array();
+				$arr_program_date = array();
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+				$hidUniqueidEdit = $_POST['hidUniqueidEdit'];
+				$txtProgramCodeEdit = $_POST['txtProgramCodeEdit'];
+				$txtProgramNameEdit = $_POST['txtProgramNameEdit'];
+				
+				$cmbProgramGroupEdit = $_POST['cmbProgramGroupEdit'];
+				//$cmbProgramGroupEdit = 'APPSC';
+				
+				$taProgramDescriptionEdit = isset($_POST['taProgramDescriptionEdit'])?$_POST['taProgramDescriptionEdit']:'';
+				$txtYearEdit = $_POST['txtYearEdit'];
+				
+				$txtSeqCodeEdit = $txtProgramCodeEdit;
+				$txtOmrNoEdit = $_POST['txtOmrNoEdit'];
+				$cmbStatusEdit = $_POST['cmbStatusEdit'];
+				$cmbRegistrationTemplateEdit = isset($_POST['cmbRegistrationTemplateEdit'])?$_POST['cmbRegistrationTemplateEdit']:'';
+				$cmbTemplateEdit = $_POST['cmbTemplateEdit'];
+				//***************************** CHANGED******************************************
+				$txtStartdateEdit = isset($_POST['txtStartdateEdit'])?$_POST['txtStartdateEdit']:'';
+				$txtEnddateEdit = isset($_POST['txtEnddateEdit'])?$_POST['txtEnddateEdit']:'';
+				$txtAppStartdateEdit = isset($_POST['txtAppStartdateEdit'])?$_POST['txtAppStartdateEdit']:'';
+				$txtAppEnddateEdit = isset($_POST['txtAppEnddateEdit'])?$_POST['txtAppEnddateEdit']:'00-00-0000';
+				$txtAgeStartdateEdit = isset($_POST['txtAgeStartdateEdit'])?$_POST['txtAgeStartdateEdit']:'';
+				$txtAgeEnddateEdit = isset($_POST['txtAgeEnddateEdit'])?$_POST['txtAgeEnddateEdit']:'';
+				/*$txtStartdate = $_POST['txtStartdate'];
+				$txtAppStartdate = $_POST['txtAppStartdate'];
+				$txtEligibledate = $_POST['txtEligibledate'];*/
+				
+				/*if($txtEligibledate != '')
+				{
+					$arr_eligible_date = $this->split_string($txtEligibledate,'-',3);
+					$txtAgeStartdateEdit = trim($arr_eligible_date[0]);
+					$txtAgeEnddateEdit = trim($arr_eligible_date[1]);
+				}
+				else
+				{
+					$txtAgeStartdateEdit = '';
+					$txtAgeEnddateEdit = '';
+				}
+				$arr_apply_date = $this->split_string($txtAppStartdate,'-',3);
+				$arr_program_date = $this->split_string($txtStartdate,'-',3);
+				$txtStartdateEdit = trim($arr_program_date[0]);
+				$txtEnddateEdit = trim($arr_program_date[1]);
+				$txtAppStartdateEdit = trim($arr_apply_date[0]);
+				$txtAppEnddateEdit = trim($arr_apply_date[1]);*/
+				
+				
+				
+				$program_code = "$txtProgramCodeEdit"."_"."$institute_code";
+				$program_code_edit = "$hidUniqueidEdit"."_"."$institute_code";
+        		$logged_user_code = "$logged_user"."_"."$institute_code";
+			
+        		$op_type = 'edit_currentdata';
+				$data = array( 
+						"program_code" 	=>$program_code,
+						"program_group" => $cmbProgramGroupEdit,
+					
+						"program_name" => $txtProgramNameEdit,
+						"program_desc" => $taProgramDescriptionEdit,
+						
+						"year" => $txtYearEdit,
+						
+						"omr_no" => $txtOmrNoEdit,
+						"status" => $cmbStatusEdit,
+						"template_code" => $cmbTemplateEdit,
+						"registration_template_code" => $cmbRegistrationTemplateEdit,
+						"program_start_date"  =>date('Y-m-d', strtotime($txtStartdateEdit)),
+						"program_end_date" =>date('Y-m-d', strtotime($txtEnddateEdit)),
+						"apply_start_date" =>date('Y-m-d', strtotime($txtAppStartdateEdit)),
+						"apply_end_date" =>date('Y-m-d', strtotime($txtAppEnddateEdit)),
+						"updated_by" => $logged_user_code,
+						"updated_on" => $date,
+					);
+				$this->db->where('program_code',$program_code_edit);
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('record_status','1');
+				$update_user = $this->db->update('program_master',$data);
+				if(! $update_user){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}
+				/*echo $this->db->last_query();
+				die();*/
+				
+				if($txtAgeStartdateEdit != '' || $txtAgeEnddateEdit )
+				{
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_eligibility_setup');
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+		            	$count = $aRow['program_code'];
+		            	if($count>=1)
+		            	{
+							$data = array( 
+							"birth_start_date"  =>date('Y-m-d', strtotime($txtAgeStartdateEdit)),
+							"birth_end_date" =>date('Y-m-d', strtotime($txtAgeEnddateEdit)),
+							"updated_by" => $logged_user_code,
+							"updated_on" => $date,
+							);
+							$this->db->where('updated_by',$logged_user_code);
+							$this->db->where('program_code',$program_code_edit);
+							$update_user = $this->db->update('program_eligibility_setup',$data);
+							if(! $update_user){
+								$dbstatus = FALSE;
+								$dbmessage = 'Error While Saving';
+							}
+						}
+						else
+						{
+							$new_array = array( 
+							"program_code"  =>date('Y-m-d', strtotime($txtAgeStartdateEdit)),
+							"birth_start_date"  =>date('Y-m-d', strtotime($txtAgeStartdateEdit)),
+							"birth_end_date" =>date('Y-m-d', strtotime($txtAgeEnddateEdit)),
+							"created_by" => $logged_user_code,
+							"created_on" => $date,
+							);
+							$this->db->insert('program_eligibility_setup',$new_array);
+							$this->db->where('program_code',$program_code_edit);
+							if(! $insert_user){
+								$dbstatus = FALSE;
+								$dbmessage = 'Error While Saving';
+							}
+							
+						}
+		            }
+				}
+				
+				
+				if($dbstatus == TRUE)
+				{
+					$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+					return $output;
+				}
+				else
+				{
+					$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+					return $output;
+				}
+				
+            break;
+            
+            case 'edit_old_data':
+				$dbstatus = "SUCCESS";
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+				$hidUniqueidEdit = $_POST['hidUniqueidEdit'];
+				$txtProgramCodeEdit = $_POST['txtProgramCodeEdit'];
+				$txtProgramNameEdit = $_POST['txtProgramNameEdit'];
+				$cmbProgramGroupEdit = $_POST['cmbProgramGroupEdit'];
+				$taElectiveSubjectsEdit = isset($_POST['taElectiveSubjectsEdit'])?$_POST['taElectiveSubjectsEdit']:'';
+				$txtYearEdit = $_POST['txtYearEdit'];
+				$txtSlnoEdit = $_POST['txtSlnoEdit'];
+				$txtSeqnoEdit = $_POST['txtSeqnoEdit'];
+				$txtSeqCodeEdit = $_POST['txtSeqCodeEdit'];
+				$txtOnlineTransactionNoEdit = $_POST['txtOnlineTransactionNoEdit'];
+				$txtOmrNoEdit = $_POST['txtOmrNoEdit'];
+				$cmbStatusEdit = $_POST['cmbStatusEdit'];
+				$cmbRegistrationTemplateEdit = isset($_POST['cmbRegistrationTemplateEdit'])?$_POST['cmbRegistrationTemplateEdit']:'';
+				$cmbTemplateEdit = $_POST['cmbTemplateEdit'];
+				$txtStartdateEdit = $_POST['txtStartdateEdit'];
+				$txtEnddateEdit = $_POST['txtEnddateEdit'];
+				$txtAppStartdateEdit = $_POST['txtAppStartdateEdit'];
+				$txtAppEnddateEdit = $_POST['txtAppEnddateEdit'];
+				$txtAgeStartdateEdit = isset($_POST['txtAgeStartdateEdit'])?$_POST['txtAgeStartdateEdit']:'';
+				$txtAgeEnddateEdit = isset($_POST['txtAgeEnddateEdit'])?$_POST['txtAgeEnddateEdit']:'';
+				$program_code = "$txtProgramCodeEdit"."_"."$institute_code";
+				$program_code_edit = "$hidUniqueidEdit"."_"."$institute_code";
+        		$logged_user_code = "$logged_user"."_"."$institute_code";
+			
+        		$op_type = 'edit_currentdata';
+				$data = array( 
+						"program_code" 	=>$program_code,
+						"program_group" => $cmbProgramGroupEdit,
+						"elective_subjects" => $taElectiveSubjectsEdit,
+						"program_name" => $txtProgramNameEdit,
+						"year" => $txtYearEdit,
+						"sl_no" => $txtSlnoEdit,
+						"online_payment_transaction_no" => $txtOnlineTransactionNoEdit,
+						"omr_no" => $txtOmrNoEdit,
+						"status" => $cmbStatusEdit,
+						"template_code" => $cmbTemplateEdit,
+						"registration_template_code" => $cmbRegistrationTemplateEdit,
+						"program_start_date"  =>date('Y-m-d', strtotime($txtStartdateEdit)),
+						"program_end_date" =>date('Y-m-d', strtotime($txtEnddateEdit)),
+						"apply_start_date" =>date('Y-m-d', strtotime($txtAppStartdateEdit)),
+						"apply_end_date" =>date('Y-m-d', strtotime($txtAppEnddateEdit)),
+						"updated_by" => $logged_user_code,
+						"updated_on" => $date,
+					);
+				$this->db->where('program_code',$program_code_edit);
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('record_status','1');
+				$update_user = $this->db->update('program_master',$data);
+				if(! $update_user){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}
+				
+				if($txtAgeStartdateEdit != '' || $txtAgeEnddateEdit )
+				{
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_eligibility_setup');
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+		            	$count = $aRow['program_code'];
+		            	if($count>=1)
+		            	{
+							$data = array( 
+							"birth_start_date"  =>date('Y-m-d', strtotime($txtAgeStartdateEdit)),
+							"birth_end_date" =>date('Y-m-d', strtotime($txtAgeEnddateEdit)),
+							"updated_by" => $logged_user_code,
+							"updated_on" => $date,
+							);
+							$this->db->where('updated_by',$logged_user_code);
+							$this->db->where('program_code',$program_code_edit);
+							$update_user = $this->db->update('program_eligibility_setup',$data);
+							if(! $update_user){
+								$dbstatus = FALSE;
+								$dbmessage = 'Error While Saving';
+							}
+						}
+						else
+						{
+							$new_array = array( 
+							"program_code"  =>date('Y-m-d', strtotime($txtAgeStartdateEdit)),
+							"birth_start_date"  =>date('Y-m-d', strtotime($txtAgeStartdateEdit)),
+							"birth_end_date" =>date('Y-m-d', strtotime($txtAgeEnddateEdit)),
+							"created_by" => $logged_user_code,
+							"created_on" => $date,
+							);
+							$this->db->insert('program_eligibility_setup',$new_array);
+							$this->db->where('program_code',$program_code_edit);
+							if(! $insert_user){
+								$dbstatus = FALSE;
+								$dbmessage = 'Error While Saving';
+							}
+							
+						}
+		            }
+				}
+				
+				if($txtSeqCodeEdit != '')
+				{
+					$data = array( 
+						"year"  =>$txtYearEdit,
+						"sequence_code"  =>$txtSeqCodeEdit,
+						"sequence_no"  =>$txtSeqnoEdit,
+						"updated_by" => $logged_user_code,
+						"updated_on" => $date,
+					);
+					$this->db->where('program_code',$program_code);
+					$update_user = $this->db->update('index_sequence_setup',$data);
+					if(! $update_user){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Updating';
+					}
+				}
+				if($dbstatus == TRUE)
+				{
+					$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+					return $output;
+				}
+				else
+				{
+					$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+					return $output;
+				}
+				
+            break;
+            
+            
+            case 'CHKEDITDUCPLICATE_data':
+				$dbstatus = '';
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				if($_POST['validateprogramcode'])
+				{
+					$getProgramCode = $_POST['txtProgramCodeEdit']."_".$institute_code;
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_master');
+					$this->db->where('program_code',$getProgramCode);
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $aRow) 
+		            {
+						$output['aaData'][] = $aRow['program_code'];
+						$dbstatus = $aRow['program_code'];
+		                
+		            }
+		            $output = array('status'=>$dbstatus);
+		           	return $output;
+				}
+				
+			break;
+			
+			
+			case 'delete_currentdata': 
+				$dbstatus = 'SUCCESS';
+            	$dbmessage = 'Data deleted successfully';
+            	$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$output = array();
+				$id = $_POST['programCode'];
+				$code = $id."_".$institute_code;
+				$this->db->where('program_code', $code);
+				$delete = $this->db->delete('program_master'); 
+				if(! $delete){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Deleting';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				
+				return $output; 
+			break;
+			
+            case 'publish_currentdata':
+				$dbstatus = "SUCCESS";
+				$dbmessage = "Published Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		$id = $_POST['programCode'];
+				$prog_code = $id."_".$institute_code;
+				$data = array( 
+						"publish_status"  =>'YES',
+					);
+				$this->db->where('program_code',$prog_code);
+				$update_user = $this->db->update('program_master',$data);
+					
+				if(! $update_user){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Updating';
+					}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;	
+			
+			case 'count_program_menu_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		if($_POST['program_code'])
+				{
+					$program_code = $_POST['program_code'];
+					$prog_code = $program_code."_".$institute_code;
+					$this->db->select('count(record_status) as total_record_count');
+	                $this->db->from('program_menu_setup');	
+	                $this->db->where('program_code',$prog_code);
+	               
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+						$output = $aRow['total_record_count'];
+		            }
+				}
+		        return $output;
+			break;		
+			
+			case 'count_active_program_menu_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		if($_POST['program_code'])
+				{
+					$program_code = $_POST['program_code'];
+					$prog_code = $program_code."_".$institute_code;
+					$this->db->select('count(record_status) as active_record_count');
+	                $this->db->from('program_menu_setup');	
+	                $this->db->where('record_status','Active');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+						$output = $aRow['active_record_count'];
+		            }
+				}
+		        return $output;
+			break;
+			
+			case 'count_show_menu_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		if($_POST['program_code'])
+				{
+					$program_code = $_POST['program_code'];
+					$prog_code = $program_code."_".$institute_code;
+					$this->db->select('count(record_status) as active_record_count');
+	                $this->db->from('program_menu_setup');	
+	                $this->db->where('program_code',$prog_code);
+	                $this->db->where('record_status','Active');
+	                $this->db->where('show_status','1');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+						$output = $aRow['active_record_count'];
+		            }
+				}
+		        return $output;
+			break;
+			
+			case 'count_zero_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		if($_POST['program_code'])
+				{
+					$program_code = $_POST['program_code'];
+					$prog_code = $program_code."_".$institute_code;
+					$this->db->select('count(program_code) as zero_fee_program');
+	                $this->db->from('program_fee_setup');	
+	                $this->db->where('program_code',$prog_code);
+	                $this->db->where('amount','0');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+						$output = $aRow['zero_fee_program'];
+		            }
+				}
+		        return $output;
+			break;
+			
+			case 'inactive_documents_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		if($_POST['program_code'])
+				{
+					$program_code = $_POST['program_code'];
+					$prog_code = $program_code."_".$institute_code;
+					$this->db->select('count(program_code) as inactive_documents');
+	                $this->db->from('program_document_setup');	
+	                $this->db->where('record_status','0');
+	                $where = '(record_status="Active" or record_status = "1")';
+					$this->db->where($where);
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+						$output = $aRow['inactive_documents'];
+		            }
+				}
+		        return $output;
+			break;
+			
+			case 'count_challandata':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		if($_POST['program_code'])
+				{
+					$program_code = $_POST['program_code'];
+					$prog_code = $program_code."_".$institute_code;
+					$this->db->select('count(challan_code) as challan_count');
+	                $this->db->from('challan_detail');	
+	                $this->db->where('program_code',$prog_code);
+	                $this->db->where('status','1');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+						$output = $aRow['challan_count'];
+		            }
+				}
+		        return $output;
+			break;
+			
+			case 'count_examcenter_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		if($_POST['program_code'])
+				{
+					$program_code = $_POST['program_code'];
+					$prog_code = $program_code."_".$institute_code;
+					$this->db->select('count(exam_centre_code) as count_exam_centre');
+	                $this->db->from('exam_centre_master');	
+	                $this->db->where('program_code',$prog_code);
+	                $this->db->where('record_status','1');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+						$output = $aRow['count_exam_centre'];
+		            }
+				}
+		        return $output;
+			break;
+			case 'count_inactive_sms_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		if($_POST['program_code'])
+				{
+					$program_code = $_POST['program_code'];
+					$prog_code = $program_code."_".$institute_code;
+					$this->db->select('count(program_code) as count_sms');
+	                $this->db->from('program_sms_setup');	
+	                $this->db->where('program_code',$prog_code);
+	                $this->db->where('record_status','0');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+						$output = $aRow['count_sms'];
+		            }
+				}
+		        return $output;
+			break;
+			case 'count_inactive_cat_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+        		if($_POST['program_code'])
+				{
+					$program_code = $_POST['program_code'];
+					$prog_code = $program_code."_".$institute_code;
+					$this->db->select('count(program_code) as count_category');
+	                $this->db->from('program_category_setup');	
+	                $this->db->where('program_code',$prog_code);
+	                $this->db->where('record_status','0');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+						$output = $aRow['count_category'];
+		            }
+				}
+		        return $output;
+			break;
+			
+			case 'SELECT_OLD_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$output = array("aaData" => array());
+        		$year = isset($_POST['y'])?$_POST['y']:'';
+				if($year != '')
+				{
+					$this->db->select("program_group,SUBSTRING_INDEX(program_master.program_code,'_',1) AS progcode,program_name,
+						program_master.YEAR,sl_no,form_template_master.file_name,program_start_date AS p_start_date,registration_template_master.file_name as reg_file_name,
+						program_end_date AS p_end_date,publish_status,online_payment_transaction_no,
+						omr_no,program_master.template_code,program_master.registration_template_code as reg_template_code,
+						apply_start_date AS a_start_date,apply_end_date AS a_end_date,
+						DATE_FORMAT(program_start_date,'%d-%m-%Y') AS program_start_date,
+						DATE_FORMAT(program_end_date,'%d-%m-%Y') AS program_end_date,
+						DATE_FORMAT(apply_start_date,'%d-%m-%Y %h:%i') AS apply_start_date,
+						DATE_FORMAT(apply_end_date,'%d-%m-%Y %h:%i') AS apply_end_date,
+						program_master.program_code,elective_subjects,sequence_code,sequence_no,
+						DATE_FORMAT(birth_start_date,'%d-%m-%Y') AS birth_start_date,
+						DATE_FORMAT(birth_end_date,'%d-%m-%Y') AS birth_end_date,
+						DATE_FORMAT(admitcard_start_date,'%d-%m-%Y') AS admitcard_start_date,
+					    DATE_FORMAT(admitcard_end_date,'%d-%m-%Y') AS admitcard_end_date,status");
+					$this->db->from('program_master');
+					$this->db->join('form_template_master','program_master.template_code = form_template_master.template_code','left');
+					$this->db->join('registration_template_master','program_master.template_code = registration_template_master.template_code','left');
+					$this->db->join('program_eligibility_setup','program_master.program_code = program_eligibility_setup.program_code','left');
+					$this->db->join('index_sequence_setup','program_master.program_code = index_sequence_setup.program_code','left');
+					$this->db->where('program_master.institute_code',$institute_code);
+					$this->db->where('program_master.year',$year);
+					$this->db->where('program_master.record_status','1');
+					$this->db->where('form_template_master.record_status','1');
+					$this->db->where('program_end_date<',$date);
+					$this->db->not_like('program_master.program_code','PROG');
+					//$result = $this->db->get();
+					//echo $this->db->last_query();
+				}
+				else
+				{
+					$this->db->select("program_group,SUBSTRING_INDEX(program_master.program_code,'_',1) AS progcode,program_name,
+						program_master.YEAR,sl_no,form_template_master.file_name,program_start_date AS p_start_date,registration_template_master.file_name as reg_file_name,
+						program_end_date AS p_end_date,publish_status,online_payment_transaction_no,
+						omr_no,program_master.template_code,program_master.registration_template_code as reg_template_code,
+						apply_start_date AS a_start_date,apply_end_date AS a_end_date,
+						DATE_FORMAT(program_start_date,'%d-%m-%Y') AS program_start_date,
+						DATE_FORMAT(program_end_date,'%d-%m-%Y') AS program_end_date,
+						DATE_FORMAT(apply_start_date,'%d-%m-%Y %h:%i') AS apply_start_date,
+						DATE_FORMAT(apply_end_date,'%d-%m-%Y %h:%i') AS apply_end_date,
+						program_master.program_code,elective_subjects,sequence_code,sequence_no,
+						DATE_FORMAT(birth_start_date,'%d-%m-%Y') AS birth_start_date,
+						DATE_FORMAT(birth_end_date,'%d-%m-%Y') AS birth_end_date,
+						DATE_FORMAT(admitcard_start_date,'%d-%m-%Y') AS admitcard_start_date,
+					    DATE_FORMAT(admitcard_end_date,'%d-%m-%Y') AS admitcard_end_date,status");
+					$this->db->from('program_master');
+					$this->db->join('form_template_master','program_master.template_code = form_template_master.template_code','left');
+					$this->db->join('registration_template_master','program_master.template_code = registration_template_master.template_code','left');
+					$this->db->join('program_eligibility_setup','program_master.program_code = program_eligibility_setup.program_code','left');
+					$this->db->join('index_sequence_setup','program_master.program_code = index_sequence_setup.program_code','left');
+					$this->db->where('program_master.institute_code',$institute_code);
+					$this->db->where('program_master.record_status','1');
+					$this->db->where('form_template_master.record_status','1');
+					$this->db->where('program_end_date<',$date);
+					$this->db->not_like('program_master.program_code','PROG');
+					//$result = $this->db->get();
+				}
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				//$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $row) 
+	            {
+	                $row1 = array();
+					$row1[0] = $slno;
+					$row1['sl_no'] = $slno;
+					$row1[1] = $row['program_group']; 
+					$row1['program_group'] = $row['program_group'];
+					$row1[2] = $row['progcode']; 
+					$row1['progcode'] = $row['progcode'];
+					$row1[3] = $row['program_name']; 
+					$row1['program_name'] = $row['program_name'];
+					$row1[4] = $row['YEAR'];
+					$row1['year'] = $row['YEAR'];
+					$row1[5] = $row['sl_no'];
+					$row1['order'] = $row['sl_no'];
+					$file_name = $row['file_name'];
+					$view_file = explode(".", $file_name);
+					$file_name = "view_".$file_name;
+					$row1[6] = $file_name;
+					$row1['file_name'] = $file_name;
+					$row1['file_name'] = $file_name;
+					$row1[7] = $row['program_start_date'];
+					$row1['program_start_date'] = $row['program_start_date'];
+					$row1[8] = $row['program_end_date'];
+					$row1['program_end_date'] = $row['program_end_date'];
+					if($row['publish_status'] == 'YES')
+					{
+						$row1[9] = "ACTIVE";
+					    $row1['publish_status'] = "ACTIVE";
+					}
+					else if($row['publish_status'] == 'NO')
+					{
+						$row1[9] = "INACTIVE";
+					    $row1['publish_status'] = "INACTIVE";
+					}
+					$row1[10] = $row['online_payment_transaction_no'];
+					$row1['online_payment_transaction_no'] = $row['online_payment_transaction_no'];
+					$row1[11] = $row['omr_no'];
+					$row1['omr_no'] = $row['omr_no'];
+					$row1[12] = "From ".date('d-m-Y', strtotime($row['program_start_date']))."<br/> To ".date('d-m-Y', strtotime($row['program_end_date']));
+					$row1['program_date'] = "From ".date('d-m-Y', strtotime($row['program_start_date']))."<br/> To ".date('d-m-Y', strtotime($row['program_end_date']));
+					$row1[13] = $row['apply_start_date'];
+					$row1['apply_start_date'] = $row['apply_start_date'];
+					$row1[14] = $row['apply_end_date'];
+					$row1['apply_end_date'] = $row['apply_end_date'];
+					$row1[15] = "From ".$row['apply_start_date']."<br/> To ".$row['apply_end_date'];
+					$row1['apply_date'] = "From ".$row['apply_start_date']."<br/> To ".$row['apply_end_date'];
+					$row1[16] = $row['program_code'];
+					$row1['program_code'] = $row['program_code'];
+					$row1[17] = $row['template_code'];
+					$row1['template_code'] = $row['template_code'];
+					$row1[18] = $row['program_group'];
+					$row1['program_group'] = $row['program_group'];
+					$row1[19] = $row['elective_subjects'];
+					$row1['elective_subjects'] = $row['elective_subjects'];
+					$row1[20] = $row['sequence_code'];
+					$row1['sequence_code'] = $row['sequence_code'];
+					$row1[21] = $row['sequence_no'];
+					$row1['sequence_no'] = $row['sequence_no'];
+					$row1[22] = $row['birth_start_date'];
+					$row1['birth_start_date'] = $row['birth_start_date'];
+					$row1[23] = $row['birth_end_date'];
+					$row1['birth_end_date'] = $row['birth_end_date'];
+					$row1[24] = $row['admitcard_start_date'];
+					$row1['admitcard_start_date'] = $row['admitcard_start_date'];
+					$row1[25] = $row['admitcard_end_date'];
+					$row1['admitcard_end_date'] = $row['admitcard_end_date'];
+					$row1[28] = $row['status'];
+					$row1['status'] = $row['status'];
+					$row1[26] = $row['reg_template_code'];
+					$row1['reg_template_code'] = $row['reg_template_code'];
+					$reg_file_name = $row['reg_file_name'];
+					if($reg_file_name != ''){
+						$view_reg_file = explode(".", $reg_file_name);
+						$reg_file_name = $view_reg_file[0]; // piece1
+						$reg_file_name = "view-".$reg_file_name.".".$view_reg_file[1];
+						$row1[27] = $reg_file_name;
+					}
+					else{
+						$row1[27] = $reg_file_name;
+					}
+					$row1['file_name'] = $reg_file_name;
+					$output['aaData'][] = $row1;
+	                $slno++;
+	                unset($row1);
+	            }
+	          	//$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output;
+			break;
+			
+			case 'count_inactive_cat_data':
+				$dbstatus = TRUE;
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		$template = $_POST['template_code'];
+        		
+				$this->db->select('template_code,file_name');
+                $this->db->from('form_template_master');	
+                $this->db->where('template_code',$template);
+                $this->db->where('record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow) 
+	            {
+					$file_name = $aRow['file_name'];
+					$view_file_opt = explode("/", $file_name);
+					$file_name = $view_file_opt[1]; // piece1
+					$view_file = explode(".", $file_name);
+					$file_name = $view_file_opt[0]."/view_".$file_name;
+					$output['aaData'][] = $file_name;
+	            }
+		        return $output;
+			break;
+			
+			
+			case 'archievedata': 
+			 
+				$dbstatus = "SUCCESS";
+            	$dbmessage = 'Data saved successfully';
+            	$dbError = '';
+            	$logged_user_code = '';
+            	$menuInsert = '';
+            	
+            	$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+				$logged_user = $this->session->userdata('user_name');
+				
+				$program = $_REQUEST['program_code'];
+				$program_code = $program.'_'.$institute_code;
+				//$op_type = 'archievedata';
+				if($program != '')
+				{
+					$this->db->select('id, program_group, program_name, program_code, compulsory_subjects,
+					 elective_subjects, year,sl_no, program_start_date, program_end_date, 
+					apply_start_date, apply_end_date, status, created_by, created_on, 
+					updated_by, updated_on, online_payment_transaction_no, omr_no, publish_status, 
+					institute_code, template_code, record_status');
+	                $this->db->from('program_master');	
+	                $this->db->where('program_code',$program_code);
+	                $this->db->where('record_status','1');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $aRow) 
+		            {
+						$output = array();
+						$new_data = array(
+						'id' 						=>$aRow['id'],
+						'program_group' 			=>$aRow['program_group'],
+						'program_name' 				=>$aRow['program_name'],
+						'program_code' 				=>$aRow['program_code'],
+						'compulsory_subjects' 		=>$aRow['compulsory_subjects'],
+						'elective_subjects' 		=>$aRow['elective_subjects'],
+						'year' 						=>$aRow['year'],
+						'sl_no' 					=>$aRow['sl_no'],
+						'program_start_date' 		=>$aRow['program_start_date'],
+						'program_end_date' 			=>$aRow['program_end_date'],
+						'apply_start_date' 			=>$aRow['apply_start_date'],
+						'apply_end_date' 			=>$aRow['apply_end_date'],
+						'status' 					=>$aRow['status'],
+						'created_by' 				=>$aRow['created_by'],
+						'created_on' 				=>$aRow['created_on'],
+						'updated_by' 				=>$aRow['updated_by'],
+						'updated_on' 				=>$aRow['updated_on'],
+						'online_payment_transaction_no' 	=>$aRow['online_payment_transaction_no'],
+						'omr_no'                    =>$aRow['omr_no'],
+						'publish_status' 			=>$aRow['publish_status'],
+						'institute_code' 			=>$aRow['institute_code'],
+						'template_code' 			=>$aRow['template_code'],
+						'record_status' 			=>$aRow['record_status'],
+						);
+						$insert_user =  $this->db->insert('program_master', $new_data);
+						if( ! $insert_user)
+						{
+							$dbStatus = "ERROR";
+							$dbMessage = "Error Inserting";
+							$dbError = mysqli_error($con);	
+						}
+						else
+						{	 
+							//$program_menu_query
+							$this->db->select('id,program_code, menu_code, sl_no, record_status, show_status, 
+								file_path, file_name,institute_code, created_by, created_on, 
+								updated_by,updated_on');
+			                $this->db->from('program_menu_setup');	
+			                $this->db->where('program_code',$program_code);
+			                $this->db->where('record_status','1');
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'menu_code' 		=>$aRow['menu_code'],
+								'show_status' 		=>$aRow['show_status'],
+								'sl_no' 					=>$aRow['sl_no'],
+								'file_path' 		=>$aRow['file_path'],
+								'file_name' 			=>$aRow['file_name'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'institute_code' 			=>$aRow['institute_code'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$program_menu_query =  $this->db->insert('program_menu_setup', $new_data);
+								if( ! $program_menu_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$program_category_query
+							$this->db->select('id,program_code, category_code, record_status, 
+								institute_code, created_by, created_on, 
+								updated_by,updated_on');
+			                $this->db->from('program_category_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'category_code' 		=>$aRow['category_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'institute_code' 			=>$aRow['institute_code'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$program_category_query =  $this->db->insert('program_category_setup', $new_data);
+								if( ! $program_category_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							
+							//$program_fee_query
+							$this->db->select('id,program_code, category_code,amount, record_status, 
+								institute_code, created_by, created_on, 
+								updated_by,updated_on');
+			                $this->db->from('program_fee_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'category_code' 		=>$aRow['category_code'],
+								'amount' 				=>$aRow['amount'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'institute_code' 			=>$aRow['institute_code'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$program_fee_query =  $this->db->insert('program_fee_setup', $new_data);
+								if( ! $program_fee_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							
+							//$program_document_query
+							$this->db->select('id,program_code, document_type_code, record_status,sl_no,
+								institute_code, created_by, created_on, 
+								updated_by,updated_on');
+			                $this->db->from('program_document_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'document_type_code' 		=>$aRow['document_type_code'],
+								'sl_no' 				=>$aRow['sl_no'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'institute_code' 			=>$aRow['institute_code'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$program_document_query =  $this->db->insert('program_document_setup', $new_data);
+								if( ! $program_document_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$program_eligibility_query
+							$this->db->select('id,birth_start_date, birth_end_date,program_code, record_status,sl_no,
+											 created_by, created_on, 
+											updated_by,updated_on');
+			                $this->db->from('program_eligibility_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'birth_start_date' 		=>$aRow['birth_start_date'],
+								'birth_end_date' 		=>$aRow['birth_end_date'],
+								'sl_no' 				=>$aRow['sl_no'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$program_eligibility_query =  $this->db->insert('program_eligibility_setup', $new_data);
+								if( ! $program_eligibility_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$index_sequence_query
+							$this->db->select('id,year, sequence_code,program_code,sequence_no,institute_code, record_status,
+											 created_by, created_on, 
+											updated_by,updated_on');
+			                $this->db->from('index_sequence_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'year' 		=>$aRow['year'],
+								'sequence_code' 		=>$aRow['sequence_code'],
+								'sequence_no' 				=>$aRow['sequence_no'],
+								'institute_code' 				=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$index_sequence_query =  $this->db->insert('index_sequence_setup', $new_data);
+								if( ! $index_sequence_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$qualification_setup_query
+							$this->db->select('id,qualification_code,program_code, record_status,
+											 created_by, created_on, 
+											updated_by,updated_on');
+			                $this->db->from('program_qualification_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'qualification_code' 		=>$aRow['qualification_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$qualification_setup_query =  $this->db->insert('index_sequence_setup', $new_data);
+								if( ! $qualification_setup_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$exam_centre_query
+							$this->db->select('id,exam_centre_code,exam_centre_name,program_code, record_status,
+											 created_by, created_on, 
+											updated_by,updated_on');
+			                $this->db->from('exam_centre_master');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'exam_centre_code' 		=>$aRow['exam_centre_code'],
+								'exam_centre_name' 		=>$aRow['exam_centre_name'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$exam_centre_query =  $this->db->insert('exam_centre_master', $new_data);
+								if( ! $exam_centre_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$program_sms_query
+							$this->db->select('id,sms_type,institute_code,program_code, record_status,
+											 created_by, created_on, 
+											updated_by,updated_on');
+			                $this->db->from('program_sms_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'sms_type' 		=>$aRow['sms_type'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$program_sms_query =  $this->db->insert('program_sms_setup', $new_data);
+								if( ! $program_sms_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$program_email_query
+							$this->db->select('id,email_type,institute_code,program_code, record_status,
+											 created_by, created_on, 
+											updated_by,updated_on');
+			                $this->db->from('program_email_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'email_type' 		=>$aRow['sms_type'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$program_email_query =  $this->db->insert('program_email_setup', $new_data);
+								if( ! $program_email_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$challan_detail_query
+							$this->db->select('id,challan_code,bank_code,bank_name,branch_name,account_no,transaction_charge
+											institute_code,program_code, status,
+											 created_by, created_on, 
+											updated_by,updated_on');
+			                $this->db->from('challan_detail');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'challan_code' 		=>$aRow['challan_code'],
+								'bank_code' 		=>$aRow['bank_code'],
+								'bank_name' 		=>$aRow['bank_name'],
+								'branch_name' 		=>$aRow['branch_name'],
+								'account_no' 		=>$aRow['account_no'],
+								'transaction_charge' 		=>$aRow['transaction_charge'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'status' 			=>$aRow['status'],
+								);
+								$challan_detail_query =  $this->db->insert('challan_detail', $new_data);
+								if( ! $challan_detail_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$online_transaction_charge_setup_query
+							$this->db->select('id,transaction_charge,institute_code,program_code, status,
+											created_by, created_on, modified_by,modified_on');
+			                $this->db->from('online_transaction_charge_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'program_code' 				=>$aRow['program_code'],
+								'modified_by' 		=>$aRow['modified_by'],
+								'modified_on' 		=>$aRow['modified_on'],
+								'transaction_charge' 		=>$aRow['transaction_charge'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'status' 			=>$aRow['status'],
+								);
+								$online_transaction_charge_setup_query =  $this->db->insert('online_transaction_charge_setup', $new_data);
+								if( ! $online_transaction_charge_setup_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$user_program_mapping
+							$this->db->select('user_program_mapping_id,user_code,institute_code,program_code, record_status,
+											created_by, created_on, updated_by,updated_on');
+			                $this->db->from('user_program_mapping');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'user_program_mapping_id' 		=>$aRow['user_program_mapping_id'],
+								'program_code' 				=>$aRow['program_code'],
+								'modified_by' 		=>$aRow['modified_by'],
+								'modified_on' 		=>$aRow['modified_on'],
+								'user_code' 		=>$aRow['user_code'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$user_program_mapping =  $this->db->insert('user_program_mapping', $new_data);
+								if( ! $user_program_mapping)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$admit_card_setup_query
+							$this->db->select('id,exam_center_code,exam_vanue_code,exam_vanue,capacity,
+											exam_center_address,admit_card_available_from,admit_card_available_upto,
+											exam_schedule,exam_instructions,controller_signature,program_code, record_status,
+											created_by, created_on, updated_by,updated_on');
+			                $this->db->from('admitcard_setup');	
+			                $this->db->where('program_code',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'exam_center_code' 				=>$aRow['exam_center_code'],
+								'exam_vanue_code' 				=>$aRow['exam_vanue_code'],
+								'exam_vanue' 				=>$aRow['exam_vanue'],
+								'capacity' 				=>$aRow['capacity'],
+								'exam_center_address' 		=>$aRow['exam_center_address'],
+								'admit_card_available_from' 		=>$aRow['admit_card_available_from'],
+								'admit_card_available_upto' 		=>$aRow['admit_card_available_upto'],
+								'exam_schedule' 		=>$aRow['exam_schedule'],
+								'exam_instructions' 		=>$aRow['exam_instructions'],
+								'controller_signature' 		=>$aRow['controller_signature'],
+								'program_code' 		=>$aRow['program_code'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$admit_card_setup_query =  $this->db->insert('admitcard_setup', $new_data);
+								if( ! $admit_card_setup_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//applicant_reg_master
+							$this->db->select('id,reg_user_id,first_name,mid_name,last_name,dob,
+											communication_flag,email_id,mobile,pin,applied_program,applied_date,reg_mode,
+											scrutiny_status,scrutiny_remark,reg_status,institute_code,status,
+											created_by, created_on, updated_by,updated_on');
+			                $this->db->from('applicant_reg_master');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'first_name' 				=>$aRow['first_name'],
+								'mid_name' 					=>$aRow['mid_name'],
+								'last_name' 				=>$aRow['last_name'],
+								'dob' 						=>$aRow['dob'],
+								'communication_flag' 		=>$aRow['communication_flag'],
+								'email_id' 					=>$aRow['email_id'],
+								'mobile' 					=>$aRow['mobile'],
+								'pin' 						=>$aRow['pin'],
+								'applied_program' 			=>$aRow['applied_program'],
+								'applied_date' 				=>$aRow['applied_date'],
+								'reg_mode' 					=>$aRow['reg_mode'],
+								'scrutiny_status' 			=>$aRow['scrutiny_status'],
+								'scrutiny_remark' 			=>$aRow['scrutiny_remark'],
+								'reg_status' 			=>$aRow['reg_status'],
+								'status' 					=>$aRow['status'],
+								'institute_code' 			=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								);
+								$applicant_reg_master =  $this->db->insert('applicant_reg_master', $new_data);
+								if( ! $applicant_reg_master)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$applicant_master_query
+							$this->db->select('id,reg_user_id,first_name,mid_name,last_name,full_name,applied_class,exam_center_code,dob,
+											gender,nationality,dob_in_word,blood_group,caste,second_language,univ_regn_no,is_reserved_quota,
+											mode_of_transport,category,is_alumnus,alumnus_name,alumnus_year_of_passing,is_staff,staff_name,
+											is_general,are_parents_alive,is_physically_challanged,is_minority_community,minority_community_details,
+											is_transfer,is_single_child,single_girl_child_flag,if_chronic_illness,chronic_illness,if_allergies,
+											allergies,is_school_attended,last_school,last_grade,last_board,subjects_offered,is_adhar_available,
+											adhar_no,present_status,employer_address,comm_address_ref_id, 
+											perm_address_ref_id, institute_code, created_by, 
+											created_on, updated_by, updated_on, status, religion, 
+											applicant_email, admission_reason, session_last_attended, 
+											applicant_landline, applicant_mobile, entrance_exam_appeared,
+											highest_qualification, secured_mark, mother_tongue, source_about_institute, 
+											guardian_name, hostel_facility, marital_status');
+			                $this->db->from('applicant_master');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'first_name' 				=>$aRow['first_name'],
+								'mid_name' 					=>$aRow['mid_name'],
+								'last_name' 				=>$aRow['last_name'],
+								'full_name' 				=>$aRow['full_name'],
+								'applied_class' 				=>$aRow['applied_class'],
+								'exam_center_code' 				=>$aRow['exam_center_code'],
+								'dob' 				=>$aRow['dob'],
+								'gender' 				=>$aRow['gender'],
+								'nationality' 				=>$aRow['nationality'],
+								'dob_in_word' 				=>$aRow['dob_in_word'],
+								'blood_group' 				=>$aRow['blood_group'],
+								'caste' 				=>$aRow['caste'],
+								'second_language' 				=>$aRow['second_language'],
+								'univ_regn_no' 				=>$aRow['univ_regn_no'],
+								'is_reserved_quota' 				=>$aRow['is_reserved_quota'],
+								'mode_of_transport' 				=>$aRow['mode_of_transport'],
+								'category' 				=>$aRow['category'],
+								'is_alumnus' 				=>$aRow['is_alumnus'],
+								'alumnus_name' 				=>$aRow['alumnus_name'],
+								'alumnus_year_of_passing' 				=>$aRow['alumnus_year_of_passing'],
+								'is_staff' 				=>$aRow['is_staff'],
+								'staff_name' 				=>$aRow['staff_name'],
+								'is_transfer' 				=>$aRow['is_transfer'],
+								'is_single_child' 				=>$aRow['is_single_child'],
+								'single_girl_child_flag' 				=>$aRow['single_girl_child_flag'],
+								'if_chronic_illness' 				=>$aRow['if_chronic_illness'],
+								'chronic_illness' 				=>$aRow['chronic_illness'],
+								'if_allergies' 				=>$aRow['if_allergies'],
+								'allergies' 				=>$aRow['allergies'],
+								'is_school_attended' 				=>$aRow['is_school_attended'],
+								'last_school' 				=>$aRow['last_school'],
+								'last_grade' 				=>$aRow['last_grade'],
+								'last_board' 				=>$aRow['last_board'],
+								'subjects_offered' 				=>$aRow['subjects_offered'],
+								'is_adhar_available' 				=>$aRow['is_adhar_available'],
+								'adhar_no' 				=>$aRow['adhar_no'],
+								'present_status' 				=>$aRow['present_status'],
+								'employer_address' 				=>$aRow['employer_address'],
+								'comm_address_ref_id' 				=>$aRow['comm_address_ref_id'],
+								'perm_address_ref_id' 				=>$aRow['perm_address_ref_id'],
+								'institute_code' 			=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'status' 				=>$aRow['status'],
+								'religion' 				=>$aRow['religion'],
+								'applicant_email' 				=>$aRow['applicant_email'],
+								'admission_reason' 				=>$aRow['admission_reason'],
+								'session_last_attended' 				=>$aRow['session_last_attended'],
+								'applicant_landline' 				=>$aRow['applicant_landline'],
+								'applicant_mobile' 				=>$aRow['applicant_mobile'],
+								'entrance_exam_appeared' 				=>$aRow['entrance_exam_appeared'],
+								'highest_qualification' 				=>$aRow['highest_qualification'],
+								'secured_mark' 				=>$aRow['secured_mark'],
+								'mother_tongue' 				=>$aRow['mother_tongue'],
+								'source_about_institute' 				=>$aRow['source_about_institute'],
+								'guardian_name' 				=>$aRow['guardian_name'],
+								'hostel_facility' 				=>$aRow['hostel_facility'],
+								'marital_status' 				=>$aRow['marital_status'],
+								);
+								$applicant_master_query =  $this->db->insert('applicant_master', $new_data);
+								if( ! $applicant_master_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$applicant_relation_query
+							$this->db->select('id,reg_user_id,applicant_rel_flag,applied_program, 
+												rel_name, rel_qualification, rel_occupation, rel_desig, 
+												rel_adhar_no, nature_of_work, annual_income, place_work, 
+												email_id, res_no, mobile_no, institute_code, 
+												created_by, created_on, updated_by, updated_on, status');
+			                $this->db->from('applicant_relation');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'applicant_rel_flag' 				=>$aRow['applicant_rel_flag'],
+								'applied_program' 				=>$aRow['applied_program'],
+								'rel_name' 				=>$aRow['rel_name'],
+								'rel_qualification' 		=>$aRow['rel_qualification'],
+								'rel_occupation' 		=>$aRow['rel_occupation'],
+								'rel_desig' 		=>$aRow['rel_desig'],
+								'rel_adhar_no' 		=>$aRow['rel_adhar_no'],
+								'nature_of_work' 		=>$aRow['nature_of_work'],
+								'annual_income' 		=>$aRow['annual_income'],
+								'place_work' 		=>$aRow['place_work'],
+								'email_id' 		=>$aRow['email_id'],
+								'res_no' 		=>$aRow['res_no'],
+								'mobile_no' 		=>$aRow['mobile_no'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'status' 			=>$aRow['status'],
+								);
+								$applicant_relation_query =  $this->db->insert('applicant_relation', $new_data);
+								if( ! $applicant_relation_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$applicant_relation_query
+							$this->db->select('id, reg_user_id, applied_program, applied_class, qual_desc_1, 
+												qual_desc_2, year_of_passing, institute_name, university_board, 
+												grade_mark_flag, percentage_mark, grade, math_grade, math_mark,
+												institute_code, created_by, created_on, updated_by, updated_on, 
+												status, division_distinction, subjects_offered, mark_secured, full_mark');
+			                $this->db->from('applicant_qualification_detail');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'applied_class' 				=>$aRow['applied_class'],
+								'applied_program' 				=>$aRow['applied_program'],
+								'qual_desc_1' 				=>$aRow['qual_desc_1'],
+								'qual_desc_2' 		=>$aRow['qual_desc_2'],
+								'year_of_passing' 		=>$aRow['year_of_passing'],
+								'institute_name' 		=>$aRow['institute_name'],
+								'university_board' 		=>$aRow['university_board'],
+								'grade_mark_flag' 		=>$aRow['grade_mark_flag'],
+								'percentage_mark' 		=>$aRow['percentage_mark'],
+								'grade' 		=>$aRow['grade'],
+								'math_grade' 		=>$aRow['math_grade'],
+								'math_mark' 		=>$aRow['math_mark'],
+								'mobile_no' 		=>$aRow['mobile_no'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'status' 			=>$aRow['status'],
+								'division_distinction' 			=>$aRow['division_distinction'],
+								'subjects_offered' 			=>$aRow['subjects_offered'],
+								'mark_secured' 			=>$aRow['mark_secured'],
+								'full_mark' 			=>$aRow['full_mark'],
+								);
+								$applicant_relation_query =  $this->db->insert('applicant_qualification_detail', $new_data);
+								if( ! $applicant_relation_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							//$applicant_other_info_query
+							$this->db->select('id, table_name, field_name, reg_user_id,applied_program,field_value,institute_code, 
+												created_by, created_on, updated_by,updated_on,status');
+			                $this->db->from('applicant_other_info');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'table_name' 				=>$aRow['table_name'],
+								'field_name' 				=>$aRow['field_name'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'applied_program' 				=>$aRow['applied_program'],
+								'field_value' 		=>$aRow['field_value'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'status' 			=>$aRow['status'],
+								);
+								$applicant_other_info =  $this->db->insert('applicant_other_info', $new_data);
+								if( ! $applicant_other_info)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							
+							//applicant_declaration
+							$this->db->select('id,reg_user_id,applied_program,declaration_flag, 
+													declaration_sl_no,declaration_remark, institute_code, 
+													created_by,created_on,updated_by,updated_on,status');
+			                $this->db->from('applicant_declaration');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'declaration_flag' 				=>$aRow['declaration_flag'],
+								'declaration_sl_no' 				=>$aRow['declaration_sl_no'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'applied_program' 				=>$aRow['applied_program'],
+								'declaration_remark' 		=>$aRow['declaration_remark'],
+								'institute_code' 		=>$aRow['institute_code'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'status' 			=>$aRow['status'],
+								);
+								$applicant_declaration =  $this->db->insert('applicant_declaration', $new_data);
+								if( ! $applicant_declaration)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							
+							//$applicant_tech_qualification_query
+							$this->db->select('id,reg_user_id,applied_program,qual_desc_1,institute_name,year, affiliation_from,
+												subjects_offered, duration, grade_cgpa, division,remark,created_by,
+												created_on, updated_by, updated_on, record_status, sl_no');
+			                $this->db->from('applicant_technical_qualification_detail');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'qual_desc_1' 				=>$aRow['qual_desc_1'],
+								'institute_name' 			=>$aRow['institute_name'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'applied_program' 			=>$aRow['applied_program'],
+								'year' 						=>$aRow['year'],
+								'affiliation_from' 			=>$aRow['affiliation_from'],
+								'subjects_offered' 			=>$aRow['subjects_offered'],
+								'duration' 					=>$aRow['duration'],
+								'grade_cgpa' 				=>$aRow['grade_cgpa'],
+								'division' 					=>$aRow['division'],
+								'remark' 					=>$aRow['remark'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								'sl_no' 			=>$aRow['sl_no'],
+								);
+								$applicant_tech_qualification_query =  $this->db->insert('applicant_technical_qualification_detail', $new_data);
+								if( ! $applicant_tech_qualification_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							
+							//$applicant_total_experience_query
+							$this->db->select('id,reg_user_id,applied_program,total_experience_1, total_experience_2,
+												total_experience_3,created_by,created_on,updated_by,
+												updated_on,record_status');
+			                $this->db->from('applicant_total_experience');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'total_experience_1' 				=>$aRow['total_experience_1'],
+								'total_experience_2' 			=>$aRow['total_experience_2'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'applied_program' 			=>$aRow['applied_program'],
+								'total_experience_3' 						=>$aRow['total_experience_3'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								'sl_no' 			=>$aRow['sl_no'],
+								);
+								$applicant_total_experience_query =  $this->db->insert('applicant_total_experience', $new_data);
+								if( ! $applicant_total_experience_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							
+							//$applicant_prev_appl_query
+							$this->db->select('id,reg_user_id,applied_program,post_applied, institute_details,interview_appear_status,
+												 selection_status, sl_no,created_by,created_on, updated_by, updated_on, record_status');
+			                $this->db->from('applicant_previous_application');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'post_applied' 				=>$aRow['post_applied'],
+								'institute_details' 			=>$aRow['institute_details'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'applied_program' 			=>$aRow['applied_program'],
+								'interview_appear_status' 						=>$aRow['interview_appear_status'],
+								'selection_status' 				=>$aRow['selection_status'],
+								'sl_no' 				=>$aRow['sl_no'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$applicant_prev_appl_query =  $this->db->insert('applicant_previous_application', $new_data);
+								if( ! $applicant_prev_appl_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+							
+							//$applicant_prev_appl_query
+							$this->db->select('id,reg_user_id,applied_program,post_applied, institute_details,interview_appear_status,
+												 selection_status, sl_no,created_by,created_on, updated_by, updated_on, record_status');
+			                $this->db->from('applicant_previous_application');	
+			                $this->db->where('applied_program',$program_code);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							$output = array("aaData" => array());
+							foreach ($output_data as $aRow) 
+				            {
+								$output = array();
+								$new_data = array(
+								'id' 						=>$aRow['id'],
+								'post_applied' 				=>$aRow['post_applied'],
+								'institute_details' 			=>$aRow['institute_details'],
+								'reg_user_id' 				=>$aRow['reg_user_id'],
+								'applied_program' 			=>$aRow['applied_program'],
+								'interview_appear_status' 						=>$aRow['interview_appear_status'],
+								'selection_status' 				=>$aRow['selection_status'],
+								'sl_no' 				=>$aRow['sl_no'],
+								'created_by' 				=>$aRow['created_by'],
+								'created_on' 				=>$aRow['created_on'],
+								'updated_by' 				=>$aRow['updated_by'],
+								'updated_on' 				=>$aRow['updated_on'],
+								'record_status' 			=>$aRow['record_status'],
+								);
+								$applicant_prev_appl_query =  $this->db->insert('applicant_previous_application', $new_data);
+								if( ! $applicant_prev_appl_query)
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									$dbError = mysqli_error($con);	
+								}
+							}
+						}	
+		            }
+				}
+			break;
+			
+			
+			
+			
+			case 'edit_olddata':
+				$dbstatus = "SUCCESS";
+				$dbmessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+				$hidUniqueidEdit = $_POST['hidUniqueidEdit'];
+				$txtProgramCodeEdit = $_POST['txtProgramCodeEdit'];
+				$txtProgramNameEdit = $_POST['txtProgramNameEdit'];
+				$cmbProgramGroupEdit = $_POST['cmbProgramGroupEdit'];
+				$taElectiveSubjectsEdit = isset($_POST['taElectiveSubjectsEdit'])?$_POST['taElectiveSubjectsEdit']:'';
+				$txtYearEdit = $_POST['txtYearEdit'];
+				$txtSlnoEdit = $_POST['txtSlnoEdit'];
+				$txtSeqnoEdit = $_POST['txtSeqnoEdit'];
+				$txtSeqCodeEdit = $_POST['txtSeqCodeEdit'];
+				$txtOnlineTransactionNoEdit = $_POST['txtOnlineTransactionNoEdit'];
+				$txtOmrNoEdit = $_POST['txtOmrNoEdit'];
+				$cmbStatusEdit = $_POST['cmbStatusEdit'];
+				$cmbRegistrationTemplateEdit = isset($_POST['cmbRegistrationTemplateEdit'])?$_POST['cmbRegistrationTemplateEdit']:'';
+				$cmbTemplateEdit = $_POST['cmbTemplateEdit'];
+				$txtStartdate = isset($_POST['txtStartdate'])?$_POST['txtStartdate']:''; 
+				$txtAppStartdate = $_POST['txtAppStartdate'];
+				$txtEligibledate = $_POST['txtEligibledate'];
+				
+				if($txtEligibledate != '')
+				{
+					$arr_eligible_date = $this->split_string($txtEligibledate,'-',3);
+					$txtAgeStartdateEdit = trim($arr_eligible_date[0]);
+					$txtAgeEnddateEdit = trim($arr_eligible_date[1]);
+				}
+				else
+				{
+					$txtAgeStartdateEdit = '';
+					$txtAgeEnddateEdit = '';
+				}
+				$arr_apply_date = $this->split_string($txtAppStartdate,'-',3);
+				$arr_program_date = $this->split_string($txtStartdate,'-',3);
+				$txtStartdateEdit = trim($arr_program_date[0]);
+				$txtEnddateEdit = trim($arr_program_date[1]);
+				$txtAppStartdateEdit = trim($arr_apply_date[0]);
+				$txtAppEnddateEdit = trim($arr_apply_date[1]);
+				
+				$program_code = "$txtProgramCodeEdit"."_"."$institute_code";
+				$program_code_edit = "$hidUniqueidEdit"."_"."$institute_code";
+        		$logged_user_code = "$logged_user"."_"."$institute_code";
+			
+        		$op_type = 'edit_olddata';
+				$data = array( 
+						"program_code" 	=>$program_code,
+						"program_group" => $cmbProgramGroupEdit,
+						"elective_subjects" => $taElectiveSubjectsEdit,
+						"program_name" => $txtProgramNameEdit,
+						"year" => $txtYearEdit,
+						"sl_no" => $txtSlnoEdit,
+						"online_payment_transaction_no" => $txtOnlineTransactionNoEdit,
+						"omr_no" => $txtOmrNoEdit,
+						"status" => $cmbStatusEdit,
+						"template_code" => $cmbTemplateEdit,
+						"registration_template_code" => $cmbRegistrationTemplateEdit,
+						"program_start_date"  =>date('Y-m-d', strtotime($txtStartdateEdit)),
+						"program_end_date" =>date('Y-m-d', strtotime($txtEnddateEdit)),
+						"apply_start_date" =>date('Y-m-d', strtotime($txtAppStartdateEdit)),
+						"apply_end_date" =>date('Y-m-d', strtotime($txtAppEnddateEdit)),
+						"updated_by" => $logged_user_code,
+						"updated_on" => $date,
+					);
+				$this->db->where('program_code',$program_code_edit);
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('record_status','1');
+				$update_user = $this->db->update('program_master',$data);
+				if(! $update_user){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Saving';
+				}
+				
+				if($txtAgeStartdateEdit != '' || $txtAgeEnddateEdit )
+				{
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_eligibility_setup');
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+		            	$count = $aRow['program_code'];
+		            	if($count>=1)
+		            	{
+							$data = array( 
+							"birth_start_date"  =>date('Y-m-d', strtotime($txtAgeStartdateEdit)),
+							"birth_end_date" =>date('Y-m-d', strtotime($txtAgeEnddateEdit)),
+							"updated_by" => $logged_user_code,
+							"updated_on" => $date,
+							);
+							$this->db->where('updated_by',$logged_user_code);
+							$this->db->where('program_code',$program_code_edit);
+							$update_user = $this->db->update('program_eligibility_setup',$data);
+							if(! $update_user){
+								$dbstatus = FALSE;
+								$dbmessage = 'Error While Saving';
+							}
+						}
+						else
+						{
+							$new_array = array( 
+							"program_code"  =>date('Y-m-d', strtotime($txtAgeStartdateEdit)),
+							"birth_start_date"  =>date('Y-m-d', strtotime($txtAgeStartdateEdit)),
+							"birth_end_date" =>date('Y-m-d', strtotime($txtAgeEnddateEdit)),
+							"created_by" => $logged_user_code,
+							"created_on" => $date,
+							);
+							$this->db->insert('program_eligibility_setup',$new_array);
+							$this->db->where('program_code',$program_code_edit);
+							if(! $insert_user){
+								$dbstatus = FALSE;
+								$dbmessage = 'Error While Saving';
+							}
+							
+						}
+		            }
+				}
+				
+				if($txtSeqCodeEdit != '')
+				{
+					$data = array( 
+						"year"  =>$txtYearEdit,
+						"sequence_code"  =>$txtSeqCodeEdit,
+						"sequence_no"  =>$txtSeqnoEdit,
+						"updated_by" => $logged_user_code,
+						"updated_on" => $date,
+					);
+					$this->db->where('program_code',$program_code);
+					$update_user = $this->db->update('index_sequence_setup',$data);
+					if(! $update_user){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Updating';
+					}
+				}
+				if($dbstatus == TRUE)
+				{
+					$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+					return $output;
+				}
+				else
+				{
+					$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+					return $output;
+				}
+				
+            break;
+            case 'delete_olddata': 
+				$dbstatus = "SUCCESS";
+            	$dbmessage = 'Data deleted successfully';
+            	$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$output = array();
+				$id = $_POST['programCode'];
+				$code = $id."_".$institute_code;
+				$this->db->where('program_code', $code);
+				$delete = $this->db->delete('program_master'); 
+				if(! $delete){
+					$dbstatus = FALSE;
+					$dbmessage = 'Error While Deleting';
+				}
+				$output = array('status'=>$dbstatus,'msg'=>$dbmessage);
+				return $output; 
+			break;
+			
+			
+			case 'get_report_admit_assign' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program = $_POST['program_code'];
+        		$exam_centre_code = $_POST['exam_centre_code'];
+				
+				$result = $this->db->query("SELECT exam_vanue,SUM(assigned_students) AS assigned_students,SUM(published_students) AS published_students FROM (
+				(SELECT assigned_exam_vanue AS exam_vanue,COUNT(appl_no) AS assigned_students,0 AS published_students
+				FROM admitcard_published WHERE record_status = 0 AND applied_program = '$program' AND applied_exam_center = '$exam_centre_code' GROUP BY exam_vanue)
+				UNION (SELECT assigned_exam_vanue AS exam_vanue,0 AS assigned_students,COUNT(appl_no) AS published_students
+				FROM admitcard_published WHERE record_status = 1 AND applied_program = '$program' AND applied_exam_center = '$exam_centre_code' GROUP BY exam_vanue)) X GROUP BY exam_vanue");
+				
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_cons_report_admit_assign' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program = $_POST['program_code'];
+        		$exam_centre_code = $_POST['exam_centre_code'];
+				
+				$result = $this->db->query("SELECT COUNT(appl_no) AS no_of_not_assigned_students
+							FROM applicant_appl_overview A
+							WHERE appl_no NOT IN (
+							SELECT appl_no AS assigned_students
+							FROM admitcard_published 
+							WHERE applied_program = '$program' AND applied_exam_center = '$exam_centre_code')
+							AND applied_program = '$program' AND appl_status = 'Verified'");
+				
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// dms by santhoshi
+			case 'select_dms_applns' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program = $_POST['program'];
+				$program_group = $_POST['program_group'];
+				$selProgram = $program;
+				$reg_user_id = isset($_POST['reg_user_id'])?$_POST['reg_user_id']:'';
+				
+				$payment_date = isset($_POST['payment_date'])?$_POST['payment_date']:'';
+				
+				$this->db->select("CONCAT(first_name,' ',mid_name,' ',last_name) AS full_name,applicant_master.reg_user_id AS reg_user_id,applicant_appl_overview.appl_no,applicant_master.institute_code");
+				$this->db->from('applicant_master');
+				$this->db->join('applicant_appl_overview','applicant_master.reg_user_id=applicant_appl_overview.reg_user_id AND applicant_master.applied_program = applicant_appl_overview.applied_program','left');
+				$this->db->where('applicant_appl_overview.appl_status','Verified');
+				$this->db->where('applicant_appl_overview.applied_program',$selProgram);
+				if($reg_user_id !='')
+				{
+					$this->db->where('applicant_master.reg_user_id',$reg_user_id);
+				}
+				$this->db->order_by("applicant_appl_overview.updated_on","desc");
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_dms_modal_data' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$appl_no = $_POST['appl_no'];
+				$reg_user_id = $_POST['reg_user_id'];
+				$program_code = $_POST['program_code'];
+				//$ins = $_POST['ins_code'];
+				
+				$base_url =  base_url();
+				$base_adm_url =  BASE_ADM_URL;
+				$scanned_copy_count = array();
+				
+				$this->db->select("B.document_type,document_path");
+				$this->db->from('applicant_form_documents A');
+				$this->db->join('document_type_master B','A.document_type = B.document_type_code','left');
+				$this->db->where('A.appl_no',$appl_no);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	            	$form_documents[] = $aRow; 
+	            }
+	            
+	            $admit_record_status = 0;
+				
+				$this->db->select('exam_center_code,exam_vanue_code,IFNULL(ap.record_status, "0") AS record_status, `as`.`template_code`, `E`.`template_name`');
+				$this->db->from('admitcard_published ap');
+				$this->db->join('admitcard_setup as','`ap`.`applied_program` = `as`.`program_code`','left');
+				$this->db->join('`admitcard_template_master` `E`','`E`.`template_code` = `as`.`template_code`','left');
+				$this->db->where('`ap`.`applied_program`',$program_code);
+				$this->db->where('`ap`.`appl_no`',$appl_no);
+				$result = $this->db->get();
+				//echo $this->db->last_query(); die();
+				$output_data = $result->result_array();
+				foreach($output_data as $row)
+				{
+					$admit_record_status = $row['record_status'];
+					$admit_template_name = $row['template_name'];
+					$exam_center_code = $row['exam_center_code'];
+					$exam_vanue = $row['exam_vanue_code'];
+				}
+	            
+	            $this->db->select("COUNT(appl_no) AS appl_no");
+				$this->db->from('admitcard_published');
+				$this->db->where('appl_no',$appl_no);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	            	$admitcard_count = $aRow['appl_no']; 
+	            }
+	            
+	            $this->db->select("appl_no,file_path,file_name");
+				$this->db->from('upload_scanned_copies');
+				$this->db->where('appl_no',$appl_no);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	            	$scanned_copy_count[] = $aRow; 
+	            }
+	            
+	            $html = '';
+	            if(sizeof($form_documents) >= 1)
+				{
+					$html .= '<center><h4 style="font-family:sans-serif; ">Documents</h4></center><br />
+									<div class="row">
+										<div class="form-group">
+											<div class="col-sm-12" align="justify">';
+							foreach($form_documents as $row)
+							{
+					$html .= '<br />
+								 <a href="'.$row['document_path'].'" target="_blank">&raquo;  <span style="color:red">'.$row['document_type'].'<br/></style></a>
+							';				
+							}
+					if($admit_record_status == 1)
+					{
+						$admit_temp_name = "admit_card_".$admit_template_name;
+						$html .= '<br />
+							<a href="'.$base_url.'admin/'.$admit_temp_name.'/'.$exam_center_code.'/'.$exam_vanue.'/'.$program_code.'/'.$reg_user_id.'/'.$institute_code.'" target="_blank">&raquo;  <span style="color:red">	
+							 Admit Card<br/>
+						    </a>
+							';		
+					}
+					if(sizeof($scanned_copy_count) >= 1)
+					{
+						foreach($scanned_copy_count as $row)
+						{
+							$html .= '<br />
+								 <a href="'.$base_adm_url.'/DOCUMENTS/'.$program_code.'/'.$appl_no.'/'.$row['file_name'].'" target="_blank">&raquo;  <span style="color:red">Uploaded Document<br/></style></a>
+							';		
+						}
+					}
+					$html .= '<br />
+						 <a href="'.$base_adm_url.'/DOCUMENTS/'.$program_code.'/'.$appl_no.'/application_print.pdf" target="_blank">&raquo;  <span style="color:red">Application<br/></style></a>
+					';	
+			
+					$html .= '					</div>
+											</div>
+										</div>';
+				}
+				
+	           	return array('html' => $html);
+			break;
+			
+			case 'get_scrutiny_modal_data_template002' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$reg_user_id = $_POST['reg_user_id'];
+				$program_code = $_POST['program_code'];
+				$program = $_POST['program_code'];
+				$seladmcode = $_POST['program_code'];
+				//$ins = $_POST['ins_code'];
+				
+				$base_url =  base_url();
+				$base_adm_url =  BASE_ADM_URL;
+				$scanned_copy_count = array();
+				
+				$this->db->select('appl_no');
+				$this->db->from('applicant_appl_overview aao');
+				$this->db->where('applied_program',$seladmcode);
+				$this->db->where('reg_user_id',$reg_user_id);
+				$result = $this->db->get();
+				$Result = $result->result_array();
+				foreach($Result as $rrow){
+					$applicantNumber = $rrow['appl_no'];
+				}
+				$application_no = $applicantNumber;
+				$this->db->select('photo.appl_no,photo.document_path AS passportphoto');
+				$this->db->from('applicant_form_documents photo');
+				$this->db->join('document_type_master doc', 'doc.document_type_code=photo.document_type', 'left');
+				$this->db->where('photo.appl_no',$applicantNumber);
+				$this->db->where('photo.document_type','PHO');
+				$subQuery1 = $this->db->_compile_select();
+				$this->db->_reset_select();
+				
+				$select =   array('photo.appl_no,photo.document_path AS SIGN');
+				$this->db->select('photo.appl_no,photo.document_path AS SIGN');
+				$this->db->from('applicant_form_documents photo');
+				$this->db->join('document_type_master doc', 'doc.document_type_code=photo.document_type', 'left');
+				$this->db->where('photo.appl_no',$applicantNumber);
+				$this->db->where('photo.document_type','SIG');
+				$subQuery2 = $this->db->_compile_select();
+				$this->db->_reset_select();
+				/*echo $this->db->last_query();
+				die();*/
+				
+				// And now your main query
+
+				$this->db->select('appmas.master_name,'.$reg_user_id.' as reg_user_id,appr.scrutiny_status,appr.scrutiny_remark,um.employee_name as scrutinised_by,date_format(appr.updated_on,"%d-%m-%Y %H:%i") as scrutinised_on,appmas.first_name,appmas.mid_name,appmas.last_name,appmas.full_name,ex.exam_centre_name,appmas.applicant_email,appmas.applicant_landline,appmas.applicant_mobile,appmas.marital_status,
+					userimg.passportphoto,signature.SIGN,gm.gender,nm.nationality AS natinality,appmas.nationality AS nationalitycode,appr.dob,appmas.dob_in_word,catm.category_name,
+					appmas.is_physically_challanged,appmas.is_minority_community,mcm.minority_community,appmas.hostel_facility,
+					appmas.single_girl_child_flag,appmas.if_chronic_illness,appmas.chronic_illness,appmas.if_allergies,appmas.allergies,appmas.last_year_mark,
+					appmas.last_school,appmas.other_university,bm.board_name,appmas.last_board,appmas.applicant_email,appmas.univ_regn_no,appmas.is_reserved_quota,
+					appr.email_id,appmas.subject_offered1,appmas.subject_offered2,appmas.subject_offered3,appmas.subject_offered4,
+					appmas.highest_qualification,hqm.qualification_name,subjects_offered,appmas.last_school,appmas.last_grade,appmas.adhar_no,appmas.physically_challenged,appmas.applied_program,appmas.exam_center_code,appmas.exam_center_code1,appmas.exam_center_code2,ex.exam_centre_name,ex1.exam_centre_name as exam_centre_name1,ex2.exam_centre_name as exam_centre_name2,appmas.is_north_east,appmas.north_east_state,appmas.category,appmas.guardian_name,appmas.father_occupation,appmas.annual_parent_income,appmas.is_employed,appmas.employer_add,appmas.employer_from,appmas.employer_to,appmas.completion_date,appmas.center_name1,appmas.center_name2,appmas.center_name3,appmas.master_name,appmas.mothers_name,appmas.mothers_profession,appmas.mothers_income,appmas.fathers_adhar_no,appmas.mothers_adhar_no,
+					appmas.total_mark,appmas.secured_mark,appmas.distinction,appmas.course_type,appmas.is_kashmiri_migrant,
+					appmas.honours_total_mark,appmas.honours_secured_mark,appmas.other_subject,appmas.period_of_debar,date_format(appmas.date_of_debar,"%d-%m-%Y") as date_of_debar,appmas.name_of_post,date_format(appmas.govt_doj,"%d-%m-%Y") as govt_doj,appmas.name_of_office,appmas.any_disciplinary_action,
+					appmas.honours_division,appmas.honours_subject,hons.subject_name,appmas.are_parents_alive,"" AS GSIGN,"" AS blood_group_name,"" AS mother_tongue,"" AS mode_of_transport, "" AS is_alumnus, "" AS alumnus_name, ""  AS alumnus_year_of_passing, "" AS is_staff,
+					"" AS staff_name, "" AS is_general, "" AS caste_name ,ipm.id_proof_name,appmas.id_proof_number,pm.program_name,ex.exam_centre_name as exam_centre_detail');
+				$this->db->from('applicant_master appmas');
+				$this->db->join("program_master pm",'appmas.applied_program = pm.program_code','inner');
+				$this->db->join("applicant_appl_overview apovr",'appmas.reg_user_id=apovr.reg_user_id','left');
+				$this->db->join("applicant_reg_master appr",'appmas.reg_user_id=appr.reg_user_id','left');
+				$this->db->join("exam_centre ec",'ec.exam_centre_code=appmas.exam_center_code','left');
+				$this->db->join("exam_centre_master ex",'ex.exam_centre_code=appmas.exam_center_code','left');
+				$this->db->join("exam_centre_master ex1",'ex1.exam_centre_code=appmas.exam_center_code1','left');
+				$this->db->join("exam_centre_master ex2",'ex2.exam_centre_code=appmas.exam_center_code2','left');
+				$this->db->join("($subQuery1) userimg",'userimg.appl_no=apovr.appl_no','left');
+				$this->db->join("($subQuery2) signature",'userimg.appl_no=apovr.appl_no','left');
+				$this->db->join("gender_master gm",'gm.gender_code=appmas.gender','left');
+				$this->db->join("nationality_master nm",'nm.nationality_code=appmas.nationality','left');
+				$this->db->join("id_proof_master ipm",'appmas.id_proof=ipm.id_proof_code','left');
+				$this->db->join("user_master um",'um.user_code=appr.updated_by','left');
+				$this->db->join("category_master catm",'catm.category_code=appmas.category','left');
+				$this->db->join("highest_qualification_master hqm",'appmas.highest_qualification = hqm.qualification_code','left');
+				$this->db->join("minority_community_master mcm",'mcm.minority_community_code =appmas.minority_community_details','left');
+				$this->db->join("board_master bm",'bm.board_code=appmas.last_board','left');
+				$this->db->join("honours_subject_master hons",'appmas.honours_subject=hons.subject_code','left');
+				$this->db->where('apovr.applied_program',$seladmcode);
+				$this->db->where('appmas.applied_program',$seladmcode);
+				$this->db->where('appmas.reg_user_id',$reg_user_id);
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$applicant_detail = array();
+				foreach($result->result_array() AS $row1)
+				{
+					$applicant_detail[]=$row1;
+				}
+				
+				$application_data = array();
+				$this->db->select('aplov.appl_no,pm.program_name,pm.elective_subjects,aplov.applied_program,aplov.index_no,pm.year');
+				$this->db->from('applicant_appl_overview aplov');
+				$this->db->join('program_master pm','pm.program_code=aplov.applied_program','left');
+				$this->db->where('aplov.reg_user_id',$reg_user_id);
+				$this->db->where('aplov.applied_program',$seladmcode);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$application_data[]=$row1;
+				}
+				
+				$tech_qual_data_5 = array();
+				$this->db->distinct("qual_desc_1,year,institute_name,thesis,stream,affiliation_from,applicant_technical_qualification_detail.subjects_offered,grade_cgpa");
+				$this->db->select("qual_desc_1,year,institute_name,thesis,stream,affiliation_from,applicant_technical_qualification_detail.subjects_offered,grade_cgpa");
+				$this->db->from('applicant_technical_qualification_detail');
+				$this->db->join('applicant_master','applicant_master.reg_user_id = applicant_technical_qualification_detail.reg_user_id','inner');
+				$this->db->where('applicant_technical_qualification_detail.applied_program',$seladmcode);
+				$this->db->where('applicant_technical_qualification_detail.reg_user_id',$reg_user_id);
+				$this->db->where('applicant_technical_qualification_detail.sl_no','5');
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$tech_qual_data_5[]=$row1;
+				}
+				
+				$tech_qual_data_6 = array();
+				$this->db->distinct("qual_desc_1,year,institute_name,thesis,stream,affiliation_from,applicant_technical_qualification_detail.subjects_offered,grade_cgpa");
+				$this->db->select("qual_desc_1,year,institute_name,thesis,stream,affiliation_from,applicant_technical_qualification_detail.subjects_offered,grade_cgpa");
+				$this->db->from('applicant_technical_qualification_detail');
+				$this->db->join('applicant_master','applicant_master.reg_user_id = applicant_technical_qualification_detail.reg_user_id','inner');
+				$this->db->where('applicant_technical_qualification_detail.applied_program',$seladmcode);
+				$this->db->where('applicant_technical_qualification_detail.reg_user_id',$reg_user_id);
+				$this->db->where('applicant_technical_qualification_detail.sl_no','6');
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$tech_qual_data_6[]=$row1;
+				}
+				
+				$applicant_father = array();
+				$this->db->select('rel_name,rel_qualification,rel_occupation,rel_desig,nature_of_work,annual_income,place_work,email_id,res_no,mobile_no');
+				$this->db->from('applicant_relation');
+				$this->db->join('applicant_master','applicant_relation.reg_user_id=applicant_master.reg_user_id','left');
+				$this->db->join('applicant_appl_overview apovr','applicant_master.reg_user_id=apovr.reg_user_id','left');
+				$this->db->where('applicant_rel_flag',1);
+				$this->db->where('applicant_relation.reg_user_id',$reg_user_id);
+				$this->db->where('applicant_master.applied_program',$seladmcode);
+				$this->db->where('applicant_relation.applied_program',$seladmcode);
+				$this->db->where('apovr.applied_program',$seladmcode);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$applicant_father[]=$row1;
+				}
+				
+				$applicant_mother = array();
+				$this->db->select('rel_name,rel_qualification,rel_occupation,rel_desig,nature_of_work,annual_income,place_work,email_id,res_no,mobile_no');
+				$this->db->from('applicant_relation');
+				$this->db->join('applicant_master','applicant_relation.reg_user_id=applicant_master.reg_user_id','left');
+				$this->db->join('applicant_appl_overview apovr','applicant_master.reg_user_id=apovr.reg_user_id','left');
+				$this->db->where('applicant_rel_flag',2);
+				$this->db->where('applicant_relation.reg_user_id',$reg_user_id);
+				$this->db->where('applicant_master.applied_program',$seladmcode);
+				$this->db->where('applicant_relation.applied_program',$seladmcode);
+				$this->db->where('apovr.applied_program',$seladmcode);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$applicant_mother[]=$row1;
+				}
+				
+				$qualification_detail = array();
+				$this->db->select(' A.`qual_desc_1` AS qual_desc_1,qual_desc_2,A.honours_subject,year_of_passing,university_board,division_distinction,mark_secured,full_mark,percentage_mark');
+				$this->db->from('applicant_qualification_detail A');
+				$this->db->join('applicant_master B','A.applied_program = B.applied_program AND A.reg_user_id = B.reg_user_id','inner');
+				$this->db->where('A.reg_user_id',$reg_user_id);
+				$this->db->where('A.applied_program',$program);
+				$this->db->where('A.qual_desc_1 is not null');
+				$this->db->order_by('B.id');
+				//$this->db->order_by ('A.year_of_passing', "ASC");
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$qualification_detail[]=$row1;
+				}
+				
+				$fetchInst = array();
+				$this->db->select('A.program_name,B.institute_name,A.department_name,A.institute_code,B.location,B.institute_address,B.logo_url');
+				$this->db->from('program_master A');
+				$this->db->join('institute_master B','A.institute_code=B.institute_code','inner');
+				$this->db->where('A.program_code',$seladmcode);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$fetchInst[]=$row1;
+				}
+				
+				$addressDetail = array();
+				$this->db->select('address_1,address_2,cand_name,co_name,city_name,post_office,dm.district_name,sm.state_name,pin,applicant_address.district_code,applicant_address.state_code,distance_from');
+				$this->db->from('applicant_address');
+				$this->db->join('applicant_master appmas','applicant_address.address_ref_id=appmas.comm_address_ref_id','left');
+				$this->db->join('applicant_appl_overview applov','applov.reg_user_id=appmas.reg_user_id','left');
+				$this->db->join('district_master dm','dm.district_code=applicant_address.district_code','left');
+				$this->db->join('state_master sm','sm.state_code=applicant_address.state_code','left');
+				$this->db->where('applov.reg_user_id',$reg_user_id);
+				$this->db->where('appmas.applied_program',$seladmcode);
+				$this->db->where('applov.applied_program',$seladmcode);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$addressDetail[]=$row1;
+				}
+				
+				$addressDetail2 = array();
+				$this->db->select('address_1,address_2,cand_name,co_name,city_name,post_office,dm.district_name,sm.state_name,pin,applicant_address.district_code,applicant_address.state_code,distance_from,
+								mobile');
+				$this->db->from('applicant_address');
+				$this->db->join('applicant_master appmas','applicant_address.address_ref_id=appmas.perm_address_ref_id','left');
+				$this->db->join('applicant_appl_overview applov','applov.reg_user_id=appmas.reg_user_id','left');
+				$this->db->join('district_master dm','dm.district_code=applicant_address.district_code','left');
+				$this->db->join('state_master sm','sm.state_code=applicant_address.state_code','left');
+				$this->db->where('applov.reg_user_id',$reg_user_id);
+				$this->db->where('appmas.applied_program',$seladmcode);
+				$this->db->where('applov.applied_program',$seladmcode);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$addressDetail2[]=$row1;
+				}
+				
+				$paymentDetail = array();
+				$this->db->select('apov.money_deposit_mode,apov.amount,DATE_FORMAT(apov.depositdate,"%d-%m-%Y") AS depositdate,apov.money_receipt_no, apov.pg_charges');
+				$this->db->from('applicant_form_fee_overview apov');
+				$this->db->join('applicant_appl_overview','apov.appl_no=applicant_appl_overview.appl_no', 'left');
+				$this->db->where('applicant_appl_overview.reg_user_id',$reg_user_id);
+				$this->db->where('applicant_appl_overview.applied_program',$seladmcode);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$paymentDetail[]=$row1;
+				}
+				
+				$otherDetail = array();
+				$this->db->select('field_value');
+				$this->db->from('applicant_other_info');
+				$this->db->join('applicant_appl_overview appov','appov.reg_user_id=applicant_other_info.reg_user_id', 'left');
+				$this->db->where('field_name','Permanent State');
+				$this->db->where('applicant_other_info.reg_user_id',$reg_user_id);
+				$this->db->where('appov.applied_program',$seladmcode);
+				$this->db->where('applicant_other_info.STATUS',1);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$otherDetail[]=$row1;
+				}
+				
+				$otherDistrict = array();
+				$this->db->select('field_value');
+				$this->db->from('applicant_other_info');
+				$this->db->join('applicant_appl_overview appov','appov.reg_user_id=applicant_other_info.reg_user_id', 'left');
+				$this->db->where('field_name','Permanent District');
+				$this->db->where('applicant_other_info.reg_user_id',$reg_user_id);
+				$this->db->where('appov.applied_program',$seladmcode);
+				$this->db->where('applicant_other_info.STATUS',1);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$otherDistrict[]=$row1;
+				}
+				
+				$otherpresentstate = array();
+				$this->db->select('field_value');
+				$this->db->from('applicant_other_info');
+				$this->db->join('applicant_appl_overview appov','appov.reg_user_id=applicant_other_info.reg_user_id', 'left');
+				$this->db->where('field_name','Present State');
+				$this->db->where('applicant_other_info.reg_user_id',$reg_user_id);
+				$this->db->where('appov.applied_program',$seladmcode);
+				$this->db->where('applicant_other_info.STATUS',1);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$otherpresentstate[]=$row1;
+				}
+				
+				$otherpresentdistrict = array();
+				$this->db->select('field_value');
+				$this->db->from('applicant_other_info');
+				$this->db->join('applicant_appl_overview appov','appov.reg_user_id=applicant_other_info.reg_user_id', 'left');
+				$this->db->where('field_name','Present District');
+				$this->db->where('applicant_other_info.reg_user_id',$reg_user_id);
+				$this->db->where('appov.applied_program',$seladmcode);
+				$this->db->where('applicant_other_info.STATUS',1);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$otherpresentdistrict[]=$row1;
+				}
+				
+				$othernationality = array();
+				$this->db->select('field_value');
+				$this->db->from('applicant_other_info');
+				$this->db->join('applicant_appl_overview appov','appov.reg_user_id=applicant_other_info.reg_user_id', 'left');
+				$this->db->where('field_name','Name of the Board');
+				$this->db->where('applicant_other_info.reg_user_id',$reg_user_id);
+				$this->db->where('appov.applied_program',$seladmcode);
+				$this->db->where('applicant_other_info.STATUS',1);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$othernationality[]=$row1;
+				}
+				
+				$applicant_documents = array();
+				$this->db->select('afd.appl_no,doc_id,document_path,dtm.document_type');
+				$this->db->from('applicant_form_documents afd');
+				$this->db->join('applicant_appl_overview','afd.appl_no=applicant_appl_overview.appl_no','inner');
+				$this->db->join('document_type_master dtm','afd.document_type = dtm.document_type_code','inner');
+				$this->db->where('afd.status',1);
+				$this->db->where('applicant_appl_overview.reg_user_id',$reg_user_id);
+				$this->db->where('applicant_appl_overview.applied_program',$seladmcode);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$applicant_documents[]=$row1;
+				}
+				$research_employment = array();
+				$this->db->select('appo.applied_program,appo.reg_user_id,ared.organization,ared.post_held,ared.date_from,ared.date_to,ared.nature_of_job,ared.pay_band,ared.basic_pay');
+				$this->db->from('applicant_research_experience_detail ared');
+				$this->db->join('applicant_appl_overview appo','ared.applied_program = appo.applied_program  AND  ared.reg_user_id = appo.reg_user_id','inner');
+				$this->db->join('program_master pm','appo.applied_program = pm.program_code ','inner');
+				$this->db->where('appo.reg_user_id',$reg_user_id);
+				$this->db->where('appo.applied_program',$program);
+				$result = $this->db->get();
+				foreach($result->result_array() AS $row1)
+				{
+					$research_employment[]=$row1;
+				}
+				
+				
+				$this->db->select('appo.applied_program,appo.reg_user_id,ard.referenced_by,ard.contact_address,ard.email_id,ard.mobile_number');
+				$this->db->from('applicant_reference_detail ard');
+				$this->db->join('applicant_appl_overview appo','ard.applied_program = appo.applied_program  AND  ard.reg_user_id = appo.reg_user_id','inner');
+				$this->db->join('program_master pm','appo.applied_program = pm.program_code ','inner');
+				$this->db->where('appo.reg_user_id',$reg_user_id);
+				$this->db->where('appo.applied_program',$program);
+				$result = $this->db->get();
+				$reference_details = array();
+				foreach($result->result_array() AS $row1)
+				{
+					$reference_details[]=$row1;
+				}
+				
+				
+				//print_r($qualification_detail);die();
+				//print_r($application_data);
+				$applicantNumber=$application_data[0]['appl_no'];
+				$programName=htmlspecialchars_decode($application_data[0]['program_name']);
+			    $programcode=$application_data[0]['applied_program'];
+				$elective_subjects = $application_data[0]['elective_subjects'];
+				$program_year = $application_data[0]['year'];
+				$index_number = $application_data[0]['index_no'];
+				
+				$next_year = $program_year + 1;
+				$next_year = substr($next_year, -2); 
+				$session = $program_year.'-'.$next_year;
+				$programName=htmlspecialchars_decode($application_data[0]['program_name']);
+				
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============STUDENT DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				$examCenters=$applicant_detail[0]['exam_centre_name'];
+				$firstName=$applicant_detail[0]['first_name'];
+				$midName=$applicant_detail[0]['mid_name'];
+				$lastName=$applicant_detail[0]['last_name'];
+				$fullName=$applicant_detail[0]['full_name'];
+				$userPhoto=$applicant_detail[0]['passportphoto'];
+				$app_email =$applicant_detail[0]['applicant_email'];
+				$sign=$applicant_detail[0]['SIGN'];
+				
+				$program_name=$applicant_detail[0]['program_name'];
+				
+				$id_proof_number=$applicant_detail[0]['id_proof_number'];
+				$id_proof_name=$applicant_detail[0]['id_proof_name'];
+				
+				//echo $master_name;
+				$userSign = $sign;
+				//$motherSign=$applicant_detail[0]['MSIGN'];
+				$are_parents_alive=$applicant_detail[0]['are_parents_alive'];
+				$guardianSign=$applicant_detail[0]['GSIGN'];
+				$gender=$applicant_detail[0]['gender'];
+				$reg_no = $applicant_detail[0]['univ_regn_no'];
+				$reserved_quota = $applicant_detail[0]['is_reserved_quota'];
+				$bloodgroup=$applicant_detail[0]['blood_group_name'];
+				$mothertongue=$applicant_detail[0]['mother_tongue'];
+				$transport=$applicant_detail[0]['mode_of_transport'];
+				$is_kashmiri_migrant=$applicant_detail[0]['is_kashmiri_migrant'];
+				$is_alumnus=$applicant_detail[0]['is_alumnus'];
+				$alumnus=$applicant_detail[0]['alumnus_name'];
+				$alumnus_year=$applicant_detail[0]['alumnus_year_of_passing'];
+				$is_staff=$applicant_detail[0]['is_staff'];
+				$staff=$applicant_detail[0]['staff_name'];
+				$is_general=$applicant_detail[0]['is_general'];
+				$qualifying_degree=$applicant_detail[0]['qualification_name'];
+				$university_name=$applicant_detail[0]['last_school'];
+				$other_university=$applicant_detail[0]['other_university'];
+				$subject_offered1=$applicant_detail[0]['subject_offered1'];
+				$subject_offered2=$applicant_detail[0]['subject_offered2'];
+				$subject_offered3=$applicant_detail[0]['subject_offered3'];
+				$subject_offered4=$applicant_detail[0]['subject_offered4'];
+				$last_grade=$applicant_detail[0]['last_grade'];
+				$caste=$applicant_detail[0]['caste_name'];
+				$subject_name=$applicant_detail[0]['subject_name'];
+				$nationality=$applicant_detail[0]['natinality'];
+				$nationalityCode=$applicant_detail[0]['nationalitycode'];
+				$adhar_no = $applicant_detail[0]['adhar_no'];
+
+				$physically_challenged = $applicant_detail[0]['physically_challenged'];
+				$applied_program = $applicant_detail[0]['applied_program'];
+				$exam_center_code = $applicant_detail[0]['exam_center_code'];
+				if($applicant_detail[0]['is_north_east'] == 'NO'){
+					$north_east_state = $applicant_detail[0]['is_north_east'];
+				}else{
+					$north_east_state = $applicant_detail[0]['is_north_east'].','.$applicant_detail[0]['north_east_state'];
+				}
+				
+				$category = $applicant_detail[0]['category'];
+				$guardian_name = $applicant_detail[0]['guardian_name'];
+				$father_occupation = $applicant_detail[0]['father_occupation'];
+				$annual_parent_income = $applicant_detail[0]['annual_parent_income'];
+				
+				$mothers_name = $applicant_detail[0]['mothers_name'];
+				$mothers_profession = $applicant_detail[0]['mothers_profession'];
+				$mothers_income = isset($applicant_detail[0]['mothers_income'])?$applicant_detail[0]['mothers_income']:0;
+				$fathers_adhar_no = $applicant_detail[0]['fathers_adhar_no'];
+				$mothers_adhar_no = $applicant_detail[0]['mothers_adhar_no'];
+
+				$is_employed = $applicant_detail[0]['is_employed'];
+				$employer_add = $applicant_detail[0]['employer_add'];
+				$employer_from = $applicant_detail[0]['employer_from'];
+				$employer_to = $applicant_detail[0]['employer_to'];
+				$completion_date = $applicant_detail[0]['completion_date'];
+
+				$center_name1 = $applicant_detail[0]['exam_centre_name'];
+				$center_name2 = $applicant_detail[0]['exam_centre_name1'];
+				$center_name3 = $applicant_detail[0]['exam_centre_name2'];
+				$center_code1 = $applicant_detail[0]['exam_center_code'];
+				$center_code2 = $applicant_detail[0]['exam_center_code1'];
+				$center_code3 = $applicant_detail[0]['exam_center_code2'];
+				$master_name = $applicant_detail[0]['master_name'];
+				$last_year_mark = $applicant_detail[0]['last_year_mark'];
+
+				//echo $center_name1 .'k'.$center_code1;
+				
+				$dob=$applicant_detail[0]['dob'];
+//				die();
+				$split=explode("-",$dob);
+				$year=$split[0];$month=$split[1];$date=$split[2];
+				$exam_centre_detail=$applicant_detail[0]['exam_centre_detail'];
+				$dobinWord=$applicant_detail[0]['dob_in_word'];
+				$category=$applicant_detail[0]['category_name'];
+				$hostel_facility=$applicant_detail[0]['hostel_facility'];
+				$is_physically_challanged=$applicant_detail[0]['is_physically_challanged'];
+				$is_minority_community=$applicant_detail[0]['is_minority_community'];
+				$minority_community_details=$applicant_detail[0]['minority_community'];
+				$marital_status=$applicant_detail[0]['marital_status'];
+				$single_girl_child_flag=$applicant_detail[0]['single_girl_child_flag'];
+				$if_chronic_illness=$applicant_detail[0]['if_chronic_illness'];
+				$chronic_illness=$applicant_detail[0]['chronic_illness'];
+				$if_allergies=$applicant_detail[0]['if_allergies'];
+				$allergies=$applicant_detail[0]['allergies'];
+				$last_school=$applicant_detail[0]['last_school'];
+				$last_board=$applicant_detail[0]['board_name'];
+				$boardCode=$applicant_detail[0]['last_board'];
+				$txtTotalMarks = $applicant_detail[0]['total_mark'];
+				$txtSecuredMarks = $applicant_detail[0]['secured_mark'];
+				$radioDistinction = $applicant_detail[0]['distinction'];
+				$txtHonoursSubject = $applicant_detail[0]['honours_subject'];
+				$other_subject = $applicant_detail[0]['other_subject'];
+				$txtHonsTotalMarks = $applicant_detail[0]['honours_total_mark'];
+				$txtHonsSecuredMarks = $applicant_detail[0]['honours_secured_mark'];
+				$email_id = $applicant_detail[0]['email_id'];
+				$othernationality = 'Non-Indian';
+				if($university_name=='OTH')
+				{
+					$university_name = $other_university;
+				}
+				if($txtHonoursSubject=='OTH')
+				{
+					$subject_name = $other_subject;
+				}
+				if($nationalityCode=='OTH')
+				{
+					$actual_nationality = $othernationality;
+				}
+				else
+				{
+					$actual_nationality = $nationality;
+				}
+				
+				if($master_name=="DPMT") 
+				{
+					$master_name="Diploma in Plastics Mould Technology";
+				}
+
+				if($master_name=="PGDPP") 
+				{
+					$master_name="Postgraduate Diploma in Plastics Processing & Testing";
+				}
+				if($master_name=="DPMD") 
+				{
+					$master_name="Post Diploma in Plastics Mould Design with CAD/CAM";
+				}
+				if($master_name=="DEPT") 
+				{
+					$master_name="Diploma in Plastics Technology";
+				}
+				if($master_name=="PGDPQ") 
+				{
+					$master_name="Postgraduate Diploma in Plastics Testing & Quality Control";
+				}
+
+				
+
+				if($txtHonsTotalMarks == 0)
+				{
+					$txtHonsTotalMarks = '';
+				}
+				if($txtHonsSecuredMarks == '0.00')
+				{
+					$txtHonsSecuredMarks = '';
+				}
+				if($reserved_quota == 'No')
+				{
+					$actual_category = '';
+				}
+				else if($reserved_quota == 'Yes')
+				{
+					$actual_category = '( '.$category.' )';
+				}
+				
+				
+				
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============STUDENT DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============INSTITURE DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				$txtHonsDivision = $applicant_detail[0]['honours_division'];
+				$radioCourseType = $applicant_detail[0]['course_type'];
+				$father_name=isset($applicant_father[0]['rel_name'])?$applicant_father[0]['rel_name']:'';
+				$relNameM=isset($applicant_mother[0]['rel_name'])?$applicant_mother[0]['rel_name']:'';
+				$institute_name = isset($fetchInst[0]['institute_name'])?$fetchInst[0]['institute_name']:'';
+				$department_name = isset($fetchInst[0]['department_name'])?$fetchInst[0]['department_name']:'';
+				$institute_code = isset($fetchInst[0]['institute_code'])?$fetchInst[0]['institute_code']:'';
+				$institute_location = isset($fetchInst[0]['location'])?$fetchInst[0]['location']:'';
+				$institute_address = isset($fetchInst[0]['institute_address'])?$fetchInst[0]['institute_address']:'';
+				$logo = isset($fetchInst[0]['logo_url'])?$fetchInst[0]['logo_url']:'';
+				$program_name = isset($fetchInst[0]['program_name'])?$fetchInst[0]['program_name']:'';
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============INSTITURE DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============PRESENT ADDRESS DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				$presentaddr1=isset($addressDetail[0]['address_1'])?$addressDetail[0]['address_1']:'';
+				$presentaddr2=isset($addressDetail[0]['address_2'])?$addressDetail[0]['address_2']:'';
+
+				$cand_name=isset($addressDetail[0]['cand_name'])?$addressDetail[0]['cand_name']:'';
+				$co_name=isset($addressDetail[0]['co_name'])?$addressDetail[0]['co_name']:'';
+				$city_name=isset($addressDetail[0]['city_name'])?$addressDetail[0]['city_name']:'';
+
+				$presentpostoffice=isset($addressDetail[0]['post_office'])?$addressDetail[0]['post_office']:'';
+				$presentdistrictcode=isset($addressDetail[0]['district_name'])?$addressDetail[0]['district_name']:'';
+				$presentstatecode=isset($addressDetail[0]['state_name'])?$addressDetail[0]['state_name']:'';
+				$presentpin=isset($addressDetail[0]['pin'])?$addressDetail[0]['pin']:'';
+				$presentdistance=isset($addressDetail[0]['distance_from'])?$addressDetail[0]['distance_from']:'';
+				$chkpresentotherdistrict=isset($addressDetail[0]['district_code'])?$addressDetail[0]['district_code']:'';
+				$chkpresentotherstate=isset($addressDetail[0]['state_code'])?$addressDetail[0]['state_code']:'';
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============PRESENT ADDRESS DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============PERMANENT ADDRESS DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				$permanentaddr1=isset($addressDetail2[0]['address_1'])?$addressDetail2[0]['address_1']:'';
+				$permanentaddr2=isset($addressDetail2[0]['address_2'])?$addressDetail2[0]['address_2']:'';
+
+				$cand_name1=isset($addressDetail2[0]['cand_name'])?$addressDetail2[0]['cand_name']:'';
+				$co_name1=isset($addressDetail2[0]['co_name'])?$addressDetail2[0]['co_name']:'';
+				$city_name1=isset($addressDetail2[0]['city_name'])?$addressDetail2[0]['city_name']:'';
+
+
+				$permanentpostoffice=isset($addressDetail2[0]['post_office'])?$addressDetail2[0]['post_office']:'';
+				$permanentdistrictcode=isset($addressDetail2[0]['district_name'])?$addressDetail2[0]['district_name']:'';
+				$permanentstatecode=isset($addressDetail2[0]['state_name'])?$addressDetail2[0]['state_name']:'';
+				$permanentpin=isset($addressDetail2[0]['pin'])?$addressDetail2[0]['pin']:'';
+				$permanentmobile=isset($addressDetail2[0]['mobile'])?$addressDetail2[0]['mobile']:'';
+				$permanentdistance=isset($addressDetail2[0]['distance_from'])?$addressDetail2[0]['distance_from']:'';
+				$chkpermanentotherdistrict=isset($addressDetail2[0]['district_code'])?$addressDetail2[0]['district_code']:'';
+				$chkpermanentotherstate=isset($addressDetail2[0]['state_code'])?$addressDetail2[0]['state_code']:'';
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============PERMANENT ADDRESS DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============PAYMENT DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				$paymentMode=isset($paymentDetail[0]['money_deposit_mode'])?$paymentDetail[0]['money_deposit_mode']:'';
+				$amountPaid=isset($paymentDetail[0]['amount'])?$paymentDetail[0]['amount']:'';
+				$depositDate=isset($paymentDetail[0]['depositdate'])?$paymentDetail[0]['depositdate']:'';
+				$transactionNo=isset($paymentDetail[0]['money_receipt_no'])?$paymentDetail[0]['money_receipt_no']:'';
+				$pg_charges=isset($paymentDetail[0]['pg_charges'])?$paymentDetail[0]['pg_charges']:'0';
+				$amountPaid = $amountPaid + $pg_charges;
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============PAYMENT DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============OTHER DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				$otherpermanentstate = isset($otherDetail[0]['field_value'])?$otherDetail[0]['field_value']:'';
+				$otherpermanentdistrict = isset($otherDistrict[0]['field_value'])?$otherDistrict[0]['field_value']:'';
+				$otherpresentstate = isset($otherpresentstate[0]['field_value'])?$otherpresentstate[0]['field_value']:'';
+				$otherpresentdistrict = isset($otherpresentdistrict[0]['field_value'])?$otherpresentdistrict[0]['field_value']:'';
+				$othernationality = isset($othernationality[0]['field_value'])?$othernationality[0]['field_value']:'';
+				/* ==================XXXXXXXXXXXXXXXXXXXXXXXX=============OTHER DETAILS==============XXXXXXXXXXXXXXXXXXX================*/
+				$is_employed = $applicant_detail[0]['is_employed'];
+				$empDisciplinary = $applicant_detail[0]['any_disciplinary_action'];
+				
+				$name_of_office = isset($applicant_detail[0]['name_of_office'])?$applicant_detail[0]['name_of_office']:'';
+				$govt_doj = isset($applicant_detail[0]['govt_doj'])?$applicant_detail[0]['govt_doj']:'';
+				$name_of_post = isset($applicant_detail[0]['name_of_post'])?$applicant_detail[0]['name_of_post']:'';
+				$date_of_debar = isset($applicant_detail[0]['date_of_debar'])?$applicant_detail[0]['date_of_debar']:'';
+				$period_of_debar = isset($applicant_detail[0]['period_of_debar'])?$applicant_detail[0]['period_of_debar']:'';
+				
+				$mSign = '';
+			   	$fSign = '';
+			   	$gSign = '';
+			   	$userimg = '';   	
+			   	$actual_category = '';
+			   	//$reg_user_id = '';
+			   	$document_upload_url = '';
+			   	//Logo
+				if($userPhoto != '')
+			    {
+			      $arr = explode('/',$userPhoto);
+			      $photo = end($arr);
+			      $photo = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$programcode."/".$applicantNumber."/".$photo;
+			    }
+				if($userSign != '')
+			    {
+			      $arr = explode('/',$userSign);
+			      $sign = end($arr);
+			      $sign = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$programcode."/".$applicantNumber."/".$sign;
+			    }
+				
+
+			    $logo = base_url()."public/assets/images/$logo";//BROWSE LOGO
+			    if($userPhoto != '' && file_exists ($photo ))
+			      $userimg="$userPhoto";//BROWSE USER IMAGE
+			    if($userSign != '' && file_exists ($sign ))
+			      $signature="$userSign";//BROWSE USER SIGNATURE
+				$date1 = $year.'-'.$month.'-'.$date;
+				//$date1 = new DateTime($date1);
+			$html = '';
+			$html .= '<table width="100%" style="border-collapse: collapse;font-family:Arial;">
+			<tr>
+				<td>
+				</td>
+				<td colspan="2" style="text-align: right;">
+					Application No : '.$applicantNumber.'
+				</td>
+			</tr>
+			<tr>
+				<td colspan="3" style="text-align: center;padding-left:-30px;">
+					<img style="vertical-align: top ;" src="'.$logo.'" />
+				</td>
+			</tr>
+			
+			
+			<tr>
+				<td style="width: 10%;text-align: right;vertical-align:middle;"></td>
+				<td style="width: 80%;text-align: center;padding-left:-30px;">
+					<h3>APPLICATION FORM FOR <br/>
+					'.$programName.'</h3><br/>
+					
+				</td>
+				<td style="width: 10%;text-align: right;vertical-align:middle;"><img style="vertical-align: top" src="'.$userimg.'" height="150" width="117" /></td>
+			
+			</tr>
+		</table>
+		
+		<table width="100%"  style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;padding :2px 2px 2px 2px; ">
+				<tr >
+					<td colspan="3" > <span style="font-size:17px;border-bottom:1px solid black;">Applicant\'s Information : </span></td>
+				</tr>
+				<tr>
+					<td width="50%">
+						1. Applicant Name </td> <td width="5%">:</td> <td width="45%">'.$firstName.' '.$midName.' '.$lastName.'</td> 
+					</tr>
+				 	<tr><td  colspan="3"></td></tr>
+				 	
+				 	
+						<tr>
+						 <td>
+						2. Father\'s/Husband\'s Name </td>
+	                      <td>:</td> <td>'.$father_name.'</td>
+	                     </tr>
+	                     <tr><td colspan="3"></td></tr>
+	                     
+	                     <tr>
+						 <td>
+						3. Mother\'s Name </td>
+	                      <td>:</td> <td>'.$mothers_name.'</td>
+	                     </tr>
+	                     <tr><td colspan="3"></td></tr>
+	                     
+	                     <tr>
+						 <td>
+						4. Date of Birth (In Figure)</td> <td>:</td> <td>'.$date.'-'.$month.'-'.$year.'  ('.$dobinWord.')</td>
+						</tr>
+						<tr><td colspan="3"></td></tr>
+						
+						<tr>
+						 <td >
+						5.  Nationality </td> <td>:</td> <td>'.$actual_nationality.'</td>
+						</tr>
+						<tr><td colspan="3"></td></tr>
+						
+						
+						
+						<tr>
+						 <td>
+						6. Aadhaar Number </td> <td>: </td> <td>'.$id_proof_number.'</td>
+						</tr>
+						<tr><td colspan="3"></td></tr>
+						
+						<tr>
+						 <td>
+						7. Category</td> <td>:</td> <td> '.$category.'</td>
+						</tr>
+						<tr><td colspan="3"></td></tr>
+						
+						<tr>
+						 <td>
+						8. Email Id</td> <td>:</td> <td>'.$email_id.'</td> 
+						</tr>
+						<tr><td colspan="3"></td></tr>
+						
+						
+	                     
+	                     <tr>
+	                      <td>
+						9. PwD Category </td> <td>:</td> <td>'.$physically_challenged.'</td>
+						</tr>
+						<tr><td colspan="3"></td></tr>
+						<tr> 
+						 <td> 
+						 
+						 <tr>
+	                      <td>
+						10. Exam Centre </td> <td>:</td> <td>'.$exam_centre_detail.'</td>
+						</tr>
+						<tr><td colspan="3"></td></tr>
+						<tr> 
+						 <td>
+
+						
+			</table>
+			<br>
+			<table width="100%"  style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;padding :2px 2px 2px 2px;">
+			  <tr>
+			   <td width="50%">
+			<table width="100%"  style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;padding :2px 2px 2px 2px;">
+				<tr>
+					<td colspan="3"><span style="font-size:17px;border-bottom:1px solid black;">11.(a) Present Address : </span></td>
+				</tr>
+				
+				 
+				   <tr><td  colspan="3"></td></tr>
+				    	 <tr><td  colspan="3"></td></tr>
+					<tr>
+					   
+					    <td> Locality/Street Name</td> <td>:</td> <td>'.$presentaddr1.'</td>
+					    </tr>
+					     <tr><td  colspan="3"></td></tr>
+					    <tr>
+						  <td>Post</td><td>:</td><td>'.$presentpostoffice.'</td>
+						 </tr>
+						  <tr><td  colspan="3"></td></tr>
+						 <tr>
+	                   <td>City</td> <td>:</td> <td>'.$city_name1.'</td>
+	                   </tr>
+	                   
+	                     <tr><td  colspan="3"></td></tr>
+						<tr>
+						 <td> 
+						 District </td> <td>:</td> <td>'.$presentdistrictcode.'</td> 
+						 </tr>
+						 
+						 <tr>
+						 <td>State</td> <td>:</td> <td>'.$presentstatecode.'</td>
+						 </tr>
+						   <tr><td  colspan="3"></td></tr>
+						 <tr>
+						 <td>
+						 PIN </td> <td>:</td> <td>'.$presentpin.' </td> 
+						 </tr>
+						  <tr><td  colspan="3"></td></tr>
+						  
+					
+			</table>
+			 </td>
+			<td width="50%" valign="top">
+		<table width="100%"  style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;padding :2px 2px 2px 2px;">
+				<tr>
+					<td colspan="3"><span style="font-size:17px;border-bottom:1px solid black;">(b) Permanent Address : </span></td>
+				</tr>
+				 
+					<tr><td  colspan="3"></td></tr>
+					 <tr><td  colspan="3"></td></tr>
+					 <tr>
+					    <td>Locality/Street Name</td> <td>:</td><td>'.$permanentaddr1.'</td>
+					  </tr>
+					  <tr><td  colspan="3"></td></tr>
+					   <tr>
+						<td>Post </td> <td>:</td> <td>'.$permanentpostoffice.'</td>
+	                   </tr>
+	                   <tr><td  colspan="3"></td></tr>
+	                   <tr>
+						 <td>City </td> <td>:</td> <td>'.$city_name.'</td>
+						</tr>
+	                 <tr><td  colspan="3"></td></tr>
+					 <tr>
+					  <td>
+						District</td>
+						<td>:</td>
+						<td>'.$permanentdistrictcode.' </td>
+						</tr>
+						<tr><td  colspan="3"></td></tr>
+						<tr>
+						<td>State </td> <td>:</td><td>'.$permanentstatecode.'</td>
+						</tr>
+						<tr><td  colspan="3"></td></tr>
+						<tr>
+						 <td>
+						PIN </td> <td>:</td><td>'.$permanentpin.'</td>
+						</tr>
+						
+					
+			</table>
+			</td>
+			</tr>
+			</table>
+			<br/>';
+			
+			$html .= '<table width="100%" style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;">
+			<tr>
+				<td colspan="3">&nbsp;</td>
+			</tr>
+			<tr>
+				<td colspan="3">&nbsp;</td>
+			</tr>
+			<tr>
+				<td colspan="3"><span style="font-size:17px;border-bottom:1px solid black;">12.Educational Qualification</span> </td>
+			</tr>
+			<tr>
+				<td colspan="3">&nbsp;</td>
+			</tr>
+			<tr>
+			<td colspan="5">
+					<table width="100%" cellpadding="5" style="border-collapse: collapse;text-align:center;" border="1">
+						<tr>
+							<td style="text-align:center;width:20%;">Name Of The Examination </td>
+							<td style="text-align:center;width:10%;">Stream </td>
+							<td style="text-align:center;width:10%;">Year Of Passing/Appearing </td>
+							<td style="text-align:center;width:20%;">Board/University</td>
+							<td style="text-align:center;width:10%;">Subject</td>
+							<td style="text-align:center;width:10%;">CGPA/% of Marks</td>
+							<td style="text-align:center;width:10%;">Division </td>
+						</tr>';
+		//print_r($qualification_detail)	; die();			
+		
+		foreach($qualification_detail as $row)
+		{
+			if($row['qual_desc_2'] == null || $row['qual_desc_2'] == '' || $row['qual_desc_2'] == 'NULL')
+			{
+				$qual_2 = '-';
+			}
+			else
+			{
+				$qual_2 = $row['qual_desc_2'];
+			}
+			$html .='<tr>
+				<td style ="width:20%;">'.$row['qual_desc_1'].'</td>
+				<td style ="width:20%;">'.$qual_2.'</td>
+				<td style ="width:10%;">'.$row['year_of_passing'].'</td>
+				<td style ="width:20%;">'.$row['university_board'].'</td>										 
+				<td style ="width:10%;">'.$row['honours_subject'].'</td>
+				<td style ="width:10%;">'.$row['percentage_mark'].'</td>
+				<td style ="width:10%;">'.$row['division_distinction'].'</td>
+			</tr>';
+		}
+		$html .= '</table>
+				</td>
+				<tr/>
+			</table> <br/>';
+			$html .= '<table width="100%"  style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;padding :2px 2px 2px 2px;">
+					<tr>
+						<td colspan="3">&nbsp;</td>
+					</tr>
+					<tr>
+						<td colspan="3">&nbsp;</td>
+					</tr>
+					<tr>
+						<td colspan="3"><span style="font-size:17px;border-bottom:1px solid black;">13.Other Qualification</span> </td>
+					</tr>
+					<tr>
+						<td colspan="3">&nbsp;</td>
+					</tr>
+					<tr>
+					<td colspan="3">
+							<table width="100%" cellpadding="5" style="border-collapse: collapse;text-align:center;" border="1">
+								<tr>
+									<td style="text-align:center;width:20%;">Name Of The Examination </td>
+									<td style="text-align:center;width:10%;">Stream </td>
+									<td style="text-align:center;width:10%;">Year Of Passing/Appearing </td>
+									<td style="text-align:center;width:20%;">Board/University</td>
+									<td style="text-align:center;width:10%;">CGPA/% of Marks</td>
+								</tr>';
+				//print_r($qualification_detail)	; die();			
+				foreach($tech_qual_data_5 as $row)
+				{
+					$html .='<tr>
+						<td style ="width:20%;">'.$row['qual_desc_1'].'</td>
+						<td style ="width:20%;">'.$row['stream'].'</td>
+						<td style ="width:10%;">'.$row['year'].'</td>
+						<td style ="width:20%;">'.$row['affiliation_from'].'</td>										 
+						<td style ="width:10%;">'.$row['grade_cgpa'].'</td>
+					</tr>';
+				}
+				foreach($tech_qual_data_6 as $row)
+				{
+					$html .='<tr>
+						<td style ="width:20%;">'.$row['qual_desc_1'].'</td>
+						<td style ="width:20%;">'.$row['stream'].'</td>
+						<td style ="width:10%;">'.$row['year'].'</td>
+						<td style ="width:20%;">'.$row['affiliation_from'].'</td>										 
+						<td style ="width:10%;">'.$row['grade_cgpa'].'</td>
+					</tr>';
+				}
+				
+				$html .= '</table>
+						</td>
+						<tr/>
+					</table> <br/><br/><br/>';
+			$html .= '<table width="100%"  style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;padding :2px 2px 2px 2px;">
+						<tr>
+							<td><span style="font-size:17px;">15. Whether working as a regular employee under the Govt. of Arunachal Pradesh ? : </span></td>
+							<td>'.$is_employed.' </td>
+							<td></td>
+						</tr>
+						</table>';	
+				if($is_employed == 'YES')
+				{
+					$html .= '<table width="100%" style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;">
+						<tr>
+							<td colspan="3">&nbsp;</td>
+						</tr>
+						<tr>
+							<td colspan="3">&nbsp;</td>
+						</tr>
+						<tr>
+							<td colspan="3"></td>
+						</tr>
+						<tr>
+							<td colspan="3">&nbsp;</td>
+						</tr>
+						<tr>
+						<td colspan="5">
+								<table width="100%" cellpadding="5" style="border-collapse: collapse;text-align:center;" border="1">
+									<tr>
+										<td style="text-align:center;width:20%;">Name Of Office </td>
+										<td style="text-align:center;width:10%;">Date of joining </td>
+										<td style="text-align:center;width:10%;">Name of the post </td>
+									</tr>';
+					//print_r($qualification_detail)	; die();			
+					$html .='<tr>
+						<td style ="width:20%;">'.$name_of_office.'</td>
+						<td style ="width:20%;">'.$govt_doj.'</td>
+						<td style ="width:10%;">'.$name_of_post.'</td>
+					</tr>';
+					$html .= '</table>
+							</td>
+							<tr/>
+						</table> <br/>';
+				}
+				
+				$html .= '<table width="100%"  style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;padding :2px 2px 2px 2px;">
+						<tr>
+							<td><span style="font-size:17px;">16. Have you ever been been debarred by State Public Service Commission ? : &nbsp;'.$empDisciplinary.'</span></td>
+							<td> </td>
+							<td></td>
+						</tr>
+						</table>';	
+				if($empDisciplinary == 'YES')
+				{
+					$html .= '<table width="100%" style="border-collapse: collapse;font-family:Arial;font-weight:bold;font-size:12px;">
+						<tr>
+							<td colspan="3">&nbsp;</td>
+						</tr>
+						<tr>
+							<td colspan="3">&nbsp;</td>
+						</tr>
+						<tr>
+							<td colspan="3"></td>
+						</tr>
+						<tr>
+							<td colspan="3">&nbsp;</td>
+						</tr>
+						<tr>
+						<td colspan="5">
+								<table width="100%" cellpadding="5" style="border-collapse: collapse;text-align:center;" border="1">
+									<tr>
+										<td style="text-align:center;width:20%;">Date </td>
+										<td style="text-align:center;width:10%;">Period of debbarment </td>
+									</tr>';
+					//print_r($application_data)	; die();			
+					$html .='<tr>
+						<td style ="width:20%;">'.$date_of_debar.'</td>
+						<td style ="width:10%;">'.$period_of_debar.'</td>
+					</tr>';
+					$html .= '</table>
+							</td>
+							<tr/>
+						</table> <br/> <br/> <br/>';
+				}
+			$form_documents = array();
+			$html .= '<h3 style="text-align:center;text-decoration:underline;">Document Details</h3></br></br>';
+		
+				$this->db->select('afd.appl_no,doc_id,document_path,dtm.document_type');
+				$this->db->from('applicant_form_documents afd');
+				$this->db->join('applicant_appl_overview','afd.appl_no=applicant_appl_overview.appl_no','inner');
+				$this->db->join('document_type_master dtm','afd.document_type = dtm.document_type_code','inner');
+				$this->db->where('afd.status',1);
+				$this->db->where('applicant_appl_overview.reg_user_id',$reg_user_id);
+				$this->db->where('applicant_appl_overview.applied_program',$program_code);
+				$this->db->where('dtm.document_type_code !=','PHO');
+				$this->db->where('dtm.document_type_code !=','SIG');
+				$result = $this->db->get();
+			/*	echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	            	$form_documents[] = $aRow; 
+	            }
+	            
+	          /*  print_r($form_documents);
+	            die();*/
+	            
+	            //$html = '';
+	            if(sizeof($form_documents) >= 1)
+				{
+					$html .= '
+									<div class="row">
+										<div class="form-group">
+											<div class="col-sm-12" align="justify">';
+							foreach($form_documents as $row)
+							{
+					$html .= '<br /><br/><br/>
+								<span style="color:red">'.$row['document_type'].'<br/>
+								<img src="'.$row['document_path'].'" width="400px;" height="300px;"></img>
+							';				
+							}
+					
+			
+					$html .= '					</div>
+											</div>
+										</div>';
+				}
+			
+		
+			
+		
+				/*
+				$i=1;
+				foreach($applicant_documents as $row){
+					
+					$html .= $i.'.'.$row['document_type'].'&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<br/>';
+					$i++;
+				};
+				
+				$this->db->select('afd.appl_no,doc_id,document_path,dtm.document_type');
+				$this->db->from('applicant_form_documents afd');
+				$this->db->join('applicant_appl_overview','afd.appl_no=applicant_appl_overview.appl_no','inner');
+				$this->db->join('document_type_master dtm','afd.document_type = dtm.document_type_code','inner');
+				$this->db->where('afd.status',1);
+				$this->db->where('applicant_appl_overview.reg_user_id',$reg_user_id);
+				$this->db->where('applicant_appl_overview.applied_program',$program_code);
+				$this->db->where('dtm.document_type_code !=','PHO');
+				$this->db->where('dtm.document_type_code !=','SIG');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	            	$form_documents[] = $aRow; 
+	            }
+	            
+	            
+	            $html = '';
+	            if(sizeof($form_documents) >= 1)
+				{
+					$html .= '<center><h4 style="font-family:sans-serif; ">Documents</h4></center><br />
+									<div class="row">
+										<div class="form-group">
+											<div class="col-sm-12" align="justify">';
+							foreach($form_documents as $row)
+							{
+					$html .= '<br /><br/><br/>
+								<span style="color:red">'.$row['document_type'].'<br/>
+								<img src="'.$row['document_path'].'" width="400px;" height="300px;"></img>
+							';				
+							}
+					
+			
+					$html .= '					</div>
+											</div>
+										</div>';
+				}*/
+				
+	           	return array('html' => $html);
+			break;
+			//
+			
+			// upload scanned copy by santhoshi
+			case 'select_published_applicants' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program = $_POST['program']?$_POST['program']:'';
+        		
+        		$this->db->distinct("B.appl_no");
+        		$this->db->select("A.full_name, B.appl_no,CONCAT(B.appl_no,'@',E.omr_no,'@',E.applied_program,'@',IFNULL(D.roll_no,'NO')) AS Application_no,CONCAT(IFNULL(D.roll_no,'NO'),'@',IFNULL(D.file_path,'NO')) AS file_path");
+				$this->db->from('applicant_master A');
+				$this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id','inner');
+				$this->db->join('admitcard_published E','B.appl_no = E.appl_no','inner');
+				$this->db->join('upload_scanned_copies D','D.appl_no = E.appl_no','LEFT');
+				$this->db->where('A.status','1');
+				$this->db->where('B.appl_status','Verified');
+				$this->db->where('B.reeval_status','Verified');
+				if($program != '')
+				{
+					$this->db->where('B.applied_program',$program);
+				}
+				$this->db->group_by('B.appl_no,A.full_name,D.roll_no,D.file_path');
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			/*case filepath_scanned_copies:
+				$appl_no=$_POST['appl_no'];
+				echo $file_path;
+				$this->db->select("file_path");
+				$this->db->from('upload_scanned_copies');
+				$this->db->where('appl_no', $appl_no);
+				$result = $this->db->get();
+				return $result->result_array();*/
+			case 'insert_scanned_copies':
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Uploaded Successfully";
+				$dbError = "";
+				$temporary_file_list = array();
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+				$arr_menu_code = array();
+				/*$show_status = $_POST['chkShow']?$_POST['chkShow']:array();*/
+				$roll_no = '';
+				$appl_nos = $_POST['hidapplno'];//echo $appl_nos; die();
+				$hidAppliedProgram = $_POST['hidAppliedProgram']?$_POST['hidAppliedProgram']:'';
+        		$logged_user_code = "$logged_user"."_"."$institute_code";
+        		
+        		$success_count = 0;
+				$error_count = 0;
+				
+				$errorArray = array();
+        		
+					$uploaddir = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$hidAppliedProgram."/".$appl_nos;
+				
+					if(!is_dir($uploaddir))
+						mkdir($uploaddir,0777,true);
+					
+	  					if(isset($_FILES['file']) && $_FILES['file']['name'] != '')
+	  					{
+	  						$imageFileType = end((explode(".", $_FILES['file']['name'])));
+							$renameDocument = "$hidAppliedProgram/$appl_nos/uploaded_doc".'.'."$imageFileType";
+	  						$docfilepath = BASE_ADM_URL."/DOCUMENTS/".$renameDocument;
+	  						$uploads_dir = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$hidAppliedProgram."/".$appl_nos."/uploaded_doc.".$imageFileType;
+							if(isset($_FILES['file']['tmp_name']) && !empty($_FILES['file']['tmp_name']))
+							{
+								$uploads_dir = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$hidAppliedProgram."/".$appl_nos."/uploaded_doc.".$imageFileType;
+								$result = move_uploaded_file($_FILES['file']['tmp_name'], $uploads_dir);
+							}
+							$renameDocument = "uploaded_doc.".$imageFileType;
+							
+							$this->db->select('omr_no');
+							$this->db->from('admitcard_published');
+							$this->db->where('appl_no',$appl_nos);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+				            {
+				            	$roll_no = $aRow['omr_no'];
+				            }
+							
+							$this->db->select('COUNT(appl_no) AS appl_no');
+							$this->db->from('upload_scanned_copies');
+							$this->db->where('appl_no',$appl_nos);
+							$result = $this->db->get();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+				            {
+				            	$count = $aRow['appl_no'];
+				            }
+				            if($count >= 1)
+				            {
+								$data = array( 
+									"roll_no"  =>$roll_no,
+									"appl_no"  =>$appl_nos,
+									"file_path" =>$docfilepath,
+									"file_name" =>$renameDocument,
+									'updated_by'=>$logged_user_code,
+									'updated_on'=>$date
+								);
+								$this->db->where('appl_no',$appl_nos);
+								$update_user = $this->db->update('upload_scanned_copies',$data);
+								/*echo $this->db->last_query();
+								die();*/
+								if($update_user)
+								{
+									$dbStatus = "SUCCESS";
+									$dbMessage = "Data successfully saved";
+								}
+								else
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "ERROR in data updation2";
+								}
+							}
+							else
+							{
+								$new_data = array(
+									"roll_no"  						=>$roll_no,
+									"appl_no"  						=>$appl_nos,
+									"file_path" 					=>$docfilepath,
+									"file_name" 					=>$renameDocument,
+									'created_by'					=>$logged_user_code,
+									'created_on'					=>$date
+								);
+								
+								$sql = $this->db->insert('upload_scanned_copies', $new_data);
+								//echo $this->db->last_query();
+								if(!$sql){
+									$dbStatus = "ERROR";
+									$dbMessage = "Error Inserting";
+									//$dbError = ;	
+								}
+							}
+							
+						}
+						else
+						{
+							$dbStatus = "ERROR";
+							$dbMessage = "Error in document upload";
+						}
+					
+				
+				$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$errorArray);
+				return $output;
+            break;
+			////////
+			case 'SELECT_ALL_MENU_data' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$this->db->select("pmm.link_text,pmm.menu_code,pmm.menu_code AS menu,
+					CONCAT(pmm.is_document_upload,'-',pmm.menu_code) AS is_document_upload,
+					CONCAT(pmm.is_document_upload,'-',pmm.menu_code) AS is_document_upload1");
+				$this->db->from('program_menu_master pmm');
+				$this->db->join('program_menu_setup as pms','pmm.menu_code = pms.menu_code','left');
+				$this->db->where('pms.record_status','Active');
+				$this->db->where('pmm.record_status','Active');
+				$this->db->group_by('pmm.menu_code');
+				$this->db->order_by('pmm.prog_sl_no');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'SELECT_MENU_data' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program = $_POST['program'];
+				$this->db->select('A.link_text,
+						CASE WHEN B.sl_no IS NULL THEN CONCAT("-",A.menu_code) ELSE sl_no END AS sl_no,
+						CASE WHEN B.show_status IS NULL THEN CONCAT(0,"-",A.menu_code) ELSE show_status END AS show_status,
+						A.is_document_upload,
+						CASE WHEN B.file_path IS NULL THEN CONCAT(A.is_document_upload1,"`") 
+						ELSE CONCAT(A.is_document_upload1,"`",B.file_path) END AS is_document_upload1');
+				$this->db->from('(SELECT pmm.menu_code,pmm.link_text,
+					CONCAT(pmm.is_document_upload,"-",pmm.menu_code) AS is_document_upload,
+					CONCAT(pmm.is_document_upload,"`",pmm.menu_code) AS is_document_upload1
+					FROM program_menu_master pmm where record_status="Active"
+					ORDER BY pmm.prog_sl_no) A');
+				$this->db->join('(SELECT pmm.menu_code,CONCAT(pms.sl_no,"-",pmm.menu_code) AS sl_no,pms.file_name,
+					CONCAT(pms.show_status,"-",pmm.menu_code) AS show_status,
+					CONCAT(pmm.is_document_upload,"-",pmm.menu_code) AS is_document_upload,
+					CONCAT(pmm.is_document_upload,"`",pmm.menu_code) AS is_document_upload1,
+					pms.file_path
+					FROM program_menu_master pmm
+					LEFT JOIN program_menu_setup pms ON pmm.menu_code = pms.menu_code
+					AND pms.program_code = "'.$program.'" AND pms.institute_code = "'.$institute_code.'" and pmm.record_status="Active"
+					ORDER BY pmm.prog_sl_no) B','A.menu_code = B.menu_code','left');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'UPDATE_MULTIPLE_data':
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+				$errorArray = array();
+				$temporary_file_list = array();
+				$document = $_POST['hidDocumentCodeAssign']?$_POST['hidDocumentCodeAssign']:array();
+				$document_upload_status = $_POST['hidDocumentStatusAssign']?$_POST['hidDocumentStatusAssign']:array();
+				$success_count = 0;
+				$error_count = 0;
+				$arr_program_code = array();
+				$arr_menu_code = array();
+				$arr_sl_no = array();
+				$arr_show_status = array();
+				$program_codes = $_POST['cmbProgramSelect'];
+				$show_status = $_POST['chkShow']?$_POST['chkShow']:array();
+				$sl_nos = $_POST['txtSeqNo']?$_POST['txtSeqNo']:array();
+        		$logged_user_code = "$logged_user"."_"."$institute_code";
+        		$op_type = 'UPDATE_MULTIPLE_data';
+        		for($i=0;$i < sizeof($program_codes);$i++)
+				{
+					$retrive_url = BASE_ADM_URL."/DOCUMENTS/".$program_codes[$i];
+					$uploaddir = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$program_codes[$i];
+					if(!is_dir($uploaddir))
+						mkdir($uploaddir,0777,true);
+					$data = array( 
+						"sl_no" => 'NULL',
+						"show_status" => '0',
+					);
+					$this->db->where('program_code',$program_codes[$i]);
+					$update_user = $this->db->update('program_menu_setup',$data);
+					if($update_user){
+						$dbStatus = "SUCCESS";
+						$dbMessage = "Data successfully saved";
+					}
+					else
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = mysqli_error($con);
+					}
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_menu_setup');
+					$this->db->where('program_code',$program_codes[$i]);
+					$this->db->where('record_status','Active');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+		            	$count = $aRow['program_code'];
+		            }
+		            //echo $this->db->last_query();
+					for($k = 0; $k < sizeof($document);$k++)
+					{
+						if(in_array($document[$k],$show_status))
+						{
+							if($document_upload_status[$k] == "Yes")
+							{
+								if(isset($_FILES['file'.$document[$k]]) && $_FILES['file'.$document[$k]]['name'] != '')
+								{
+									$uploaded_DocFile = explode(".",$_FILES['file'.$document[$k]]['name']);
+									$ext = end($uploaded_DocFile);
+									$renameDocument = $document[$k].'.'.$ext;
+									$temp_file = $_FILES['file'.$document[$k]]['tmp_name'];
+									$docfilepath = "$retrive_url/$renameDocument";
+									$temporary_file_list[$document[$k]] = $temp_file;
+									if(copy($temp_file, "$uploaddir/$renameDocument"))
+									{
+										
+						            	if($count >= 1)
+						            	{
+											$data = array( 
+												"sl_no"  =>$sl_nos[$k],
+												"show_status" =>'1',
+												"file_path" => $docfilepath,
+												"file_name" =>$renameDocument,
+												"updated_by" => $logged_user_code,
+												"updated_on" => $date,
+											);
+											$this->db->where('program_code',$program_codes[$i]);
+											$this->db->where('menu_code',$document[$k]);
+											$update_user = $this->db->update('program_menu_setup',$data);
+											if(! $update_user){
+												$dbstatus = FALSE;
+												$dbMessage = 'Error While Saving';
+											}
+											else
+											{
+												$success_count++;
+											}
+										}
+										else
+										{
+											$new_array = array( 
+												"program_code"  =>$program_codes[$i],
+												"menu_code"  =>$document[$k],
+												"sl_no" =>$sl_nos[$k],
+												"record_status" =>'Active',
+												"file_path" =>$docfilepath,
+												"file_name" =>$renameDocument,
+												"institute_code" =>$institute_code,
+												"created_by" => $logged_user_code,
+												"created_on" => $date,
+												"show_status"=> '1',
+											);
+											$insert_user = $this->db->insert('program_menu_setup',$new_array);
+											if($insert_user){
+												$dbStatus = "SUCCESS";
+												$dbMessage = "Data successfully saved";
+												$success_count++;
+											}
+											else
+											{	
+												$dbStatus = "ERROR";
+												$dbMessage = mysqli_error($con);
+												$error_count++;
+												$errorArray[] = $document[$i];
+												
+											}
+											
+										}
+									}
+									else
+									{
+										$dbStatus = "ERROR";
+										$dbMessage = "Error in document upload";
+									}
+								}
+								else
+								{
+					            	if($count>=1)
+					            	{
+										$data = array( 
+										"sl_no"  =>$sl_nos[$k],
+										"show_status" =>'1',
+										"updated_by" => $logged_user_code,
+										"updated_on" => $date,
+										);
+										$this->db->where('program_code',$program_codes[$i]);
+										$this->db->where('menu_code',$document[$k]);
+										$update_user = $this->db->update('program_menu_setup',$data);
+										if(! $update_user){
+											$dbstatus = FALSE;
+											$dbMessage = 'Error While Saving';
+										}
+										else
+										{
+											$success_count++;
+										}
+									}
+									else
+									{
+										$new_array = array( 
+											"program_code"  =>$program_codes[$i],
+											"menu_code"  =>$document[$k],
+											"sl_no" =>$sl_nos[$k],
+											"record_status" =>'Active',
+											"institute_code" =>$institute_code,
+											"created_by" => $logged_user_code,
+											"created_on" => $date,
+											"show_status"=> '1'
+										);
+										$insert_user = $this->db->insert('program_menu_setup',$new_array);
+										if($insert_user){
+											$dbStatus = "SUCCESS";
+											$dbMessage = "Data successfully saved";
+											$success_count++;
+										}
+										else
+										{	
+											$dbStatus = "ERROR";
+											$dbMessage = mysqli_error($con);
+											$error_count++;
+											$errorArray[] = $document[$i];
+										}
+										
+									}
+								}
+							}
+							else
+							{
+								
+				            	if($count>=1)
+				            	{
+									$data = array( 
+										"sl_no"  =>$sl_nos[$k],
+										"show_status" =>'1',
+										"updated_by" => $logged_user_code,
+										"updated_on" => $date
+									);
+									$this->db->where('program_code',$program_codes[$i]);
+									$this->db->where('menu_code',$document[$k]);
+									$update_user = $this->db->update('program_menu_setup',$data);
+									if(! $update_user){
+										$dbstatus = FALSE;
+										$dbMessage = 'Error While Saving';
+									}
+									else
+									{
+										$success_count++;
+									}
+								}
+								else
+								{
+									$new_array = array( 
+										"program_code"  =>$program_codes[$i],
+										"menu_code"  =>$document[$k],
+										"sl_no" =>$sl_nos[$k],
+										"record_status" =>'Active',
+										"institute_code" =>$institute_code,
+										"created_by" => $logged_user_code,
+										"created_on" => $date,
+										"show_status"=> '1'
+									);
+									$insert_user = $this->db->insert('program_menu_setup',$new_array);
+									if($insert_user){
+										$dbStatus = "SUCCESS";
+										$dbMessage = "Data successfully saved";
+										$success_count++;
+									}
+									else
+									{	
+										$dbStatus = "ERROR";
+										$dbMessage = mysqli_error($con);
+										$error_count++;
+										$errorArray[] = $document[$i];
+									}
+									
+								}
+							}
+						}
+					}
+				}
+				//Delete all the uploaded files
+				foreach ($temporary_file_list as $filename) {
+				  	unlink($filename);
+				}
+				if($success_count == 0)
+				{
+					$dbStatus = 'ERROR';
+					$dbMessage ='All Combinations Are Already Exists';
+				}
+				else
+				{
+					$dbStatus = 'SUCCESS';
+					$dbMessage = "Files Uploaded Successfully";
+				}
+				$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$errorArray);
+				return $output;
+            break;
+            
+            
+            
+            case 'UPDATE_data':
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				$temporary_file_list = array();
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+				$arr_menu_code = array();
+				$program = $_POST['cmbProgramFilter'];
+				$sl_nos = $_POST['txtSeqNoEdit']?$_POST['txtSeqNoEdit']:array();
+				$show_status = $_POST['chkShowSingle']?$_POST['chkShowSingle']:array();
+				$menu_codes = $_POST['hidMenuCode']?$_POST['hidMenuCode']:array();
+				$document_upload_status = $_POST['hidDocumentStatus']?$_POST['hidDocumentStatus']:array();
+				$program_code = $program;
+        		$logged_user_code = "$logged_user"."_"."$institute_code";
+        		$op_type = 'UPDATE_data';
+        		
+        		$success_count = 0;
+				$error_count = 0;
+				$retrive_url = BASE_ADM_URL."/DOCUMENTS/".$program;
+				$uploaddir = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$program;
+				if(!is_dir($uploaddir))
+					mkdir($uploaddir,0777,true);
+				$errorArray = array();
+				$data = array( 
+						"sl_no" => 'NULL',
+						"show_status" => '0',
+					);
+					$this->db->where('program_code',$program_code);
+					$update_user = $this->db->update('program_menu_setup',$data);
+					if($update_user)
+					{
+						$dbStatus = "SUCCESS";
+						$dbMessage = "Data successfully Updated";
+					}
+					else
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "ERROR in Updation";
+					}
+        		for($j=0;$j<sizeof($menu_codes);$j++)
+				{
+					if(in_array($menu_codes[$j],$show_status))
+					{
+						if($document_upload_status[$j] == "Yes")
+						{
+		  					if(isset($_FILES['fileEdit'.$menu_codes[$j]]) && $_FILES['fileEdit'.$menu_codes[$j]]['name'] != '')
+		  					{
+								$uploaded_DocFile = explode(".",$_FILES['fileEdit'.$menu_codes[$j]]['name']);
+								$ext = end($uploaded_DocFile);
+								$renameDocument = "$menu_codes[$j]".'.'."$ext";
+								$temp_file = $_FILES['fileEdit'.$menu_codes[$j]]['tmp_name'];
+								$docfilepath = "$retrive_url/$renameDocument";
+								$temporary_file_list[$menu_codes[$j]] = $temp_file;
+								$uploaded_DocFile=$ext;
+								//$$uploaded_DocFile = end((explode(".", $_FILES['fileEdit'.$menu_codes[$j]]['name'])));
+								$check = getimagesize($_FILES['fileEdit'.$menu_codes[$j]]["tmp_name"]);
+								if($check !== false) {
+
+								} 
+								else 
+								{
+									return array('status'=>false, 'msg'=>"Not an Image");
+								}
+								if($_FILES['fileEdit'.$menu_codes[$j]]["size"] > 1536000) {
+									return array('status'=>false, 'msg'=>"Size of the image should be within 1MB");
+								}
+								// Allow certain file formats
+							/*	if($uploaded_DocFile != "jpg" && $uploaded_DocFile != "png" && $uploaded_DocFile != "jpeg" ) {
+									return array('status'=>false, 'msg'=>"Supported file types are jpg/png/jpeg/gif");
+								}
+								if(isset($_FILES['fileEdit'.$menu_codes[$j]]['tmp_name']) && !empty($_FILES['fileEdit'.$menu_codes[$j]]['tmp_name'])){
+									$pic_name = $this->input->post('institutecode').".".$uploaded_DocFile;//$_FILES['fileinstitutelogo']['name'];
+									$uploads_dir = APPPATH."../public/assets/images/logo/".$pic_name;
+									$result = move_uploaded_file($_FILES['fileEdit'.$menu_codes[$j]]['tmp_name'], $uploads_dir);
+								}*/
+
+								if(copy($temp_file, "$uploaddir/$renameDocument"))
+								{
+									$data = array( 
+										"sl_no"  =>$sl_nos[$j],
+										"show_status" =>'1',
+										"file_path" =>$docfilepath,
+										"file_name" =>$renameDocument,
+										);
+										$this->db->where('program_code',$program_code);
+										$this->db->where('menu_code',$menu_codes[$j]);
+										$this->db->update('program_menu_setup',$data);
+										//echo $this->db->last_query();
+									if($update_user)
+									{
+										$dbStatus = "SUCCESS";
+										$dbMessage = "Data successfully saved";
+									}
+									else
+									{
+										$dbStatus = "ERROR";
+										$dbMessage = "ERROR in data updation";
+									}
+								}
+								else
+								{
+									$dbStatus = "ERROR";
+									$dbMessage = "Error in document upload";
+								}
+							}
+							else
+							{
+								$data = array( 
+										"sl_no"  =>$sl_nos[$j],
+										"show_status" =>'1',
+										"updated_by" =>$logged_user_code,
+										"updated_on" =>$date,
+										);
+										$this->db->where('program_code',$program_code);
+										$this->db->where('menu_code',$menu_codes[$j]);
+										$update_user = $this->db->update('program_menu_setup',$data);
+								if($update_user)
+								{
+									$dbStatus = "SUCCESS";
+									$dbMessage = "Data successfully saved";
+									$success_count++;
+								}
+								else
+								{
+									$error_count++;
+									$errorArray[] = $menu_codes[$j];
+								}
+							}
+						}
+						else
+						{
+							$data = array( 
+								"sl_no"  =>$sl_nos[$j],
+								"show_status" =>'1',
+								"updated_by" =>$logged_user_code,
+								"updated_on" =>$date,
+							);
+							$this->db->where('program_code',$program_code);
+							$this->db->where('menu_code',$menu_codes[$j]);
+							$update_user = $this->db->update('program_menu_setup',$data);
+							//echo $this->db->last_query();
+							if($update_user)
+							{
+								$dbStatus = "SUCCESS";
+								$dbMessage = "Data successfully saved";
+								$success_count++;
+							}
+							else
+							{
+								$error_count++;
+								$errorArray[] = $menu_codes[$j];
+							}
+						}
+					}
+				}
+				//Delete all the uploaded files
+				foreach ($temporary_file_list as $filename) {
+				  	unlink($filename);
+				}
+				if($error_count == sizeof($errorArray )&&( $error_count!=0 && sizeof($errorArray )!=0))
+				{
+					$dbStatus = 'ERROR';
+					$dbMessage ='Combinations is Already  Exist';
+				}
+				else
+				{
+					$dbStatus = 'SUCCESS';
+					$dbMessage = "Menu Successfully Updated";
+				}
+				$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$errorArray);
+				return $output;
+            break;
+            
+            case 'SELECT_data' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program = $_POST['program'];
+				$this->db->select("CONCAT(description,'@',CODE) AS description,CONCAT(g_code,'`',g_desc,'`',field_status)");
+				$this->db->from('(SELECT A.code_group, A.code, A.description, A.sl_no,
+						CASE WHEN B.field_status IS NULL THEN "OPTIONAL" ELSE B.field_status END AS field_status 
+						FROM registration_field_setup A
+						LEFT JOIN program_registration_field_mapping B ON A.code = B.field_code 
+						AND B.program_code = "'.$program.'"
+						ORDER BY A.sl_no) A,(SELECT GROUP_CONCAT(CODE) AS g_code,GROUP_CONCAT(description) AS g_desc
+					FROM gen_code_description
+					WHERE code_group = "FIELD_STATUS") B');
+				$result = $this->db->get();
+				$this->db->save_queries = TRUE;
+				/*echo  $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'select_streams' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				$this->db->select("stream_code,stream_name");
+				$this->db->from('stream_master');
+				$result = $this->db->get();
+				//echo  $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'ADD_Stream' :
+				$txtCounterCode = isset($_POST['txtCenterCode'])?$_POST['txtCenterCode']:'';
+				$txtCounterName = isset($_POST['txtCenterName'])?$_POST['txtCenterName']:'';
+				$date = date('Y-m-d H:i:s', now());
+				$institute_code = $this->session->userdata("institute_code");
+				
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Data Successfully Inserted";
+				
+				$this->db->where("stream_code",$txtCounterCode);
+				$this->db->select("count(stream_code) as stream_code");
+				$this->db->from("stream_master");
+				
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach($output_data as $row)
+				{
+					$cnt = $row['stream_code'];
+				}
+				
+				
+				if($cnt == '0')
+				{
+					$new_array = array( 
+						"stream_code"  =>$txtCounterCode,
+						"stream_name"  =>$txtCounterName,
+						"created_by" => 'SUPADM001',
+						"created_on" => $date,
+					);
+					$sql = $this->db->insert('stream_master',$new_array);
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+				}
+				else
+				{
+					$update_data = array(
+						"stream_name"  =>$txtCounterName,
+						"updated_by" => 'SUPADM001',
+						"updated_on" => $date,
+					);
+					$this->db->where('stream_code',$txtCounterCode);
+					$sql = $this->db->update('stream_master', $update_data);
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			case 'UPDATE_Stream' :
+				
+				$institute_code = $this->session->userdata("institute_code");
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Data Successfully Updated";
+				$txtCounterCode = isset($_POST['hidNodalCentre'])?$_POST['hidNodalCentre']:'';
+				$txtCounterName = isset($_POST['txtCenterName'])?$_POST['txtCenterName']:'';
+				$date = date('Y-m-d H:i:s', now());
+				
+				$update_data = array(
+					"stream_name"  =>$txtCounterName,
+					"updated_by" => 'SUPADM001',
+					"updated_on" => $date,
+				);
+				$this->db->where('stream_code',$txtCounterCode);
+				$sql = $this->db->update('stream_master', $update_data);
+				
+				/*echo $this->db->last_query();
+				die();*/
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+				}
+				
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break;
+			
+			case 'operation_delete_stream' :
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Deleted";
+				$stream_code=isset($_POST['stream_code'])?$_POST['stream_code']:'';
+				$date = date('Y-m-d H:i:s', now());
+				
+				$this->db->where("stream_code",$stream_code);
+				$update_applicant_relation2 = $this->db->delete('stream_master');
+				//echo $this->db->last_query();
+				if(!$update_applicant_relation2)
+				{
+					$dbstatus = FALSE;
+					$dbmessage = 'Error deleting';
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			case 'SELECT_ALL_data' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				$this->db->select("CONCAT(description,'`',CODE) AS description,
+								CONCAT(g_code,'`',g_desc,'`',field_status) AS field_status");
+				$this->db->from('(SELECT code_group,CODE,description,sl_no,field_status
+						FROM registration_field_setup
+						WHERE code_group = "REGISTRATION_PAGE"
+						ORDER BY sl_no) A,(SELECT GROUP_CONCAT(CODE) AS g_code,GROUP_CONCAT(description) AS g_desc
+						FROM gen_code_description
+						WHERE code_group = "FIELD_STATUS") B');
+				$result = $this->db->get();
+				//echo  $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'CMB_STATUS_data':
+				$this->db->select('code');
+				$this->db->from('gen_code_description');
+				$this->db->where('code_group','FIELD_STATUS');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow) 
+	            {
+					$output['aaData'][] = $aRow;
+	                
+	            }
+	           	return $output;
+			break;
+			case 'CMB_CODE_data':
+				$this->db->select('COLUMN_NAME');
+				$this->db->from('INFORMATION_SCHEMA.COLUMNS ');
+				$this->db->where('TABLE_SCHEMA','es_admission');
+				$this->db->where('TABLE_NAME','applicant_reg_master');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $aRow) 
+	            {
+					$output['aaData'][] = $aRow;
+	                
+	            }
+	           	return $output;
+			break;
+			
+			case 'UPDATE_MULTIPLE_reg_data':
+				$dbStatus = 'SUCCESS';
+				$dbMessage = "Assigned Successfully";
+				$dbError = '';
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+				$arr_program_code = array();
+				$arr_menu_code = array();
+				$arr_sl_no = array();
+				$arr_show_status = array();
+				$program_codes = $_POST['program_codes'];
+				$field_code = $_POST['field_code']?$_POST['field_code']:'';
+				$field_status = $_POST['field_status']?$_POST['field_status']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+        		$logged_user_code = "$logged_user"."_"."$institute_code";
+        		$op_type = 'UPDATE_MULTIPLE_reg_data';
+        		
+        		for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_registration_field_mapping');
+					$this->db->where('program_code',$arr_program_code[$i]);
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+		            	$count = $aRow['program_code'];
+		            }
+					for($j=0;$j<sizeof($field_code);$j++)
+					{
+						
+		            	if($count >= 1)
+		            	{
+							$data = array( 
+								"field_code"  =>$field_code[$j],
+								"field_status" =>$field_status[$j],
+								"institute_code" => $institute_code,
+								"updated_by" => $logged_user_code,
+								"updated_on" => $date
+							);
+							$this->db->where('program_code',$arr_program_code[$i]);
+							$this->db->where('field_code',$field_code[$j]);
+							$update_user = $this->db->update('program_registration_field_mapping',$data);
+							if(! $update_user){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Assigning";
+							}
+						}
+						else
+						{
+							$new_array = array( 
+								"program_code"  =>$arr_program_code[$i],
+								"code_group"  =>'REGISTRATION_PAGE',
+								"field_code" =>$field_code[$j],
+								"field_status" =>$field_status[$j],
+								"institute_code" =>$institute_code,
+								"created_by" => $logged_user_code,
+								"created_on" => $date
+							);
+							$insert_user = $this->db->insert('program_registration_field_mapping',$new_array);
+							if($insert_user){
+								$dbStatus = "SUCCESS";
+								$dbMessage = "Data successfully saved";
+							}
+							else
+							{	
+								$dbStatus = "ERROR";
+								$dbMessage ="Error in saving";
+								
+							}
+						}
+			            
+						
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$dbError);
+					return $output;
+				}
+				else
+				{
+					$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$dbError);
+					return $output;
+				}
+            break;
+            
+            
+            case 'UPDATE_reg_data':
+				$dbStatus = 'SUCCESS';
+				$dbMessage = "Updated Successfully";
+				$dbError = '';
+				
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$year = date('Y', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		
+				$arr_program_code = array();
+				$arr_menu_code = array();
+				$arr_sl_no = array();
+				$arr_show_status = array();
+				$program_codes = array();
+				$program_codes = $_POST['program_codes'];
+				//$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				$field_code = $_POST['field_code']?$_POST['field_code']:'';
+				$field_status = $_POST['field_status']?$_POST['field_status']:'';
+        		$logged_user_code = "$logged_user"."_"."$institute_code";
+        		$op_type = 'UPDATE_reg_data';
+        		for($i=0;$i<sizeof($field_code);$i++)
+				{
+					$this->db->select('COUNT(program_code) AS program_code');
+					$this->db->from('program_registration_field_mapping');
+					$this->db->where('program_code',$program_codes);
+					$this->db->where('record_status','1');
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+		            {
+		            	$count = $aRow['program_code'];
+		            	if($count>=1)
+		            	{
+							$data = array( 
+							"field_code"  =>$field_code[$i],
+							"field_status" =>$field_status[$i],
+							"institute_code" => $institute_code,
+							"created_by" => $logged_user_code,
+							"created_on" => $date,
+							);
+							$this->db->where('program_code',$program_codes);
+							$this->db->where('field_code',$field_code[$i]);
+							$update_user = $this->db->update('program_registration_field_mapping',$data);
+							if(! $update_user){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Assigning";
+							}
+						}
+						else
+						{
+							$new_array = array( 
+							"program_code"  =>$program_codes,
+							"code_group"  =>'REGISTRATION_PAGE',
+							"field_code" =>$field_code[$i],
+							"field_status" =>$field_status[$i],
+							"institute_code" =>$institute_code,
+							"created_by" => $logged_user_code,
+							"created_on" => $date,
+							);
+							$insert_user = $this->db->insert('program_registration_field_mapping',$new_array);
+							//echo $this->db->last_query();
+							if($insert_user){
+								$dbStatus = "SUCCESS";
+								$dbMessage = "Data successfully saved";
+							}
+							else
+							{	
+								$dbStatus = "ERROR";
+								$dbMessage ="Error in saving";
+								
+							}
+						}
+		            }
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$dbError);
+					return $output;
+				}
+				else
+				{
+					$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$dbError);
+					return $output;
+				}
+            break;     
+            
+            case 'select_prog_all_data' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		$logged_user_code = "$logged_user"."_"."$institute_code";
+        		
+				$this->db->select("program_name, P.program_code,program_group");
+				$this->db->from(' program_master P');
+				$this->db->join('user_program_mapping U ','P.program_code = U.program_code','inner');
+				$this->db->where('STATUS','Active');
+				$this->db->where('publish_status','YES');
+				$this->db->where('P.record_status','1');
+				$this->db->where('U.record_status','1');
+				$this->db->where('P.institute_code',$institute_code);
+				$this->db->where('U.institute_code',$institute_code);
+				$this->db->where('U.user_code',$logged_user_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break; 
+			
+			/////*************************************** Santhoshi *****************************************//// 
+
+			
+			
+			// to get all category in multiselect
+			
+			case 'get_program_data' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		/*if($institute_code == 'EDUSOLS')
+        		{
+					$institute_code = 'APPSC';	
+				}*/
+				$this->db->select("program_code,REPLACE(program_name,'&amp;','&') AS program_name");
+				$this->db->from('program_master');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_end_date>=',$date);
+				$this->db->not_like('program_master.program_code','PROG');
+				$this->db->order_by("id");
+				$result = $this->db->get();
+				//echo $this->db->last_query();die();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_assign_data' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$this->db->select("program_code,REPLACE(program_name,'&amp;','&') AS program_name");
+				$this->db->from('program_master');
+				$this->db->where('institute_code',$institute_code);
+				$this->db->where('program_end_date>=',$date);
+				$this->db->not_like('program_master.program_code','PROG');
+				$this->db->order_by("id");
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'get_assign_data2' :
+				$id = isset($_POST['id'])?$_POST['id']:'';
+				$program_code = isset($_POST['program_code'])?$_POST['program_code']:'';
+				$document_type_code = isset($_POST['document_type_code'])?$_POST['document_type_code']:'';
+				$institute_code = isset($_POST['institute_code'])?$_POST['institute_code']:'';
+				$created_by = isset($_POST['created_by'])?$_POST['created_by']:'';
+				$created_on = isset($_POST['created_on'])?$_POST['created_on']:'';
+				$updated_by = isset($_POST['updated_by'])?$_POST['updated_by']:'';
+				$updated_on = isset($_POST['updated_on'])?$_POST['updated_on']:'';
+				$record_status = isset($_POST['record_status'])?$_POST['record_status']:'';
+				$last_updated = isset($_POST['last_updated'])?$_POST['last_updated']:'';
+				$sl_no = isset($_POST['sl_no'])?$_POST['sl_no']:'';
+			
+			
+				$new_array = array
+				( 
+					
+					"id"  =>$id,
+					"program_code"  =>$program_code,
+					"document_type_code" =>$document_type_code,
+					"institute_code" =>$institute_code,
+					"created_by" =>$created_by,
+					"created_on" =>$created_on,
+					"updated_by"  =>$updated_by,
+					"updated_on" =>$updated_on,
+					"record_status" =>$record_status,
+					"last_updated" =>$last_updated,
+					"sl_no" =>$sl_no,
+				);
+				$sql = $this->db->insert('selected_program_document_setup',$new_array);
+				if(!$sql)
+				
+				{
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+				}else
+				{
+					$dbStatus = "SUCCESS";
+					$dbMessage = "success";
+				}
+				
+	           	return array('status' => $dbStatus, 'msg' =>$dbMessage);
+	           	
+			break;
+			// to get data for assign multiple category datatable
+			
+			case 'get_category_multiple':
+				//$institute = $_POST['institute'];
+				$this->db->select("category_code,category_name,category_code as category");
+				$this->db->from('category_master');
+				$this->db->where('record_status','1');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			//Assign Center
+			case 'assign_multiple_exam_centre' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+				$arr_program_code = array();
+				$centre_codes = array();
+				$arr_show_status = array();
+				$program_codes = $_POST['program_codes'];
+				$centre_codes = $_POST['centre_code']?$_POST['centre_code']:'';
+				$centre_name = $_POST['centre_name']?$_POST['centre_name']:'';
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					for($j=0;$j<sizeof($centre_codes);$j++)
+					{
+						$count = 0;
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							$this->db->select("count(program_code) AS program_code");
+							$this->db->from('exam_centre_master');
+							$this->db->where('program_code',$arr_program_code[$i]);
+							$this->db->where('exam_centre_code',$centre_codes[$j]);
+							
+							$result = $this->db->get();
+							//echo $this->db->last_query();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+		            		{
+		            			$result = $aRow['program_code'];
+								if($result >= 1){
+									$update_data = array(
+										'record_status' 				=>$show_status[$j],
+										'updated_by'					=>$user,
+										'updated_on'					=>$date
+									);
+									$this->db->where('program_code',$arr_program_code[$i] );
+									$this->db->where('exam_centre_code',$centre_codes[$j] );
+									$sql = $this->db->update('exam_centre_master', $update_data);
+									//echo $this->db->last_query();
+									if(!$sql){
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = ;	
+									}
+									
+								}
+								else{
+									$new_data = array(
+										'program_code' 					=>$arr_program_code[$i],
+										'exam_centre_code' 				=>$centre_codes[$j],
+										'exam_centre_name' 				=>$centre_codes[$j],
+										'record_status' 				=>$show_status[$j],
+										'created_by'					=>$user,
+										'created_on'					=>$date
+									);
+									$sql = $this->db->insert('exam_centre_master', $new_data);
+									//echo $this->db->last_query();
+									if(!$sql){
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = ;	
+									}
+								}
+							}
+						}
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			// update exam center
+			case 'update_centre' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$hidProgramCodeEdit = $_POST['program_code'];
+				$cmbStatusEdit = $_POST['show_status'];
+				
+				$this->db->select("A.exam_centre_code,B.exam_centre_name");
+				$this->db->from('institute_exam_centre_setup A');
+				$this->db->join('exam_centre B','A.exam_centre_code = B.exam_centre_code','left');
+				$this->db->where('A.institute_code',$institute_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				//$i = 0;
+				$output_data = $result->result_array();
+				foreach ($output_data as $row) 
+	            {
+					$output[] = $row;
+				}
+				$i = 0;
+				//print_r($output);
+				foreach($output as $row)
+				{
+					$exam_centre_code = $row['exam_centre_code'];
+					$this->db->select("exam_centre_code,exam_centre_name");
+					$this->db->from('exam_centre_master');
+					$this->db->where('exam_centre_code',$exam_centre_code);
+					$this->db->where('program_code',$hidProgramCodeEdit);
+					$result = $this->db->get();
+					$num_row = $result->num_rows();
+					$exam_centre_name = $row['exam_centre_name'];
+					$new_data = array(
+								'program_code' 					=>$hidProgramCodeEdit,
+								'exam_centre_code' 				=>$exam_centre_code,
+								'exam_centre_name' 				=>$exam_centre_name,
+								'record_status' 				=>$cmbStatusEdit[$i]
+								
+							);
+					$i++;
+					//echo $num_row;
+					if($num_row == 1)
+					{
+						$this->db->where('exam_centre_code',$exam_centre_code);
+						$this->db->where('program_code',$hidProgramCodeEdit);
+						$updateQuery = $this->db->update('exam_centre_master',$new_data);
+						
+						//echo $this->db->last_query();
+					}
+					else
+					{
+						$updateQuery = $this->db->insert('exam_centre_master',$new_data);
+					}
+				
+					
+					if(!$updateQuery)
+					{
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+					}
+					
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$dbError);
+				}
+				else
+				{
+					$output = array("dbStatus"=>$dbStatus,"dbMessage"=>$dbMessage,"dbError"=>$dbError);
+				}
+		
+				return $output;
+			break; 
+			
+			// assigning multiple data
+			
+			case 'assign_multiple_category' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$arr_program_code = array();
+				$category_codes = array();
+				$arr_show_status = array();
+				$program_codes = $_POST['program_codes'];
+				$category_codes = $_POST['category_codes']?$_POST['category_codes']:'';
+				//print_r($category_codes);
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					for($j=0;$j<sizeof($category_codes);$j++)
+					{
+						$count = 0;
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							$this->db->select("count(program_code) AS program_code");
+							$this->db->from('program_category_setup');
+							$this->db->where('program_code',$arr_program_code[$i]);
+							$this->db->where('category_code',$category_codes[$j]);
+							
+							$result = $this->db->get();
+							//echo $this->db->last_query();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+		            		{
+		            			$result = $aRow['program_code'];
+								if($result >= 1){
+									if($arr_program_code[$i] != "multiselect-all")
+									{
+										$update_data = array(
+											'record_status' 				=>$show_status[$j],
+											'institute_code' 				=>$institute_code,
+											'updated_by'					=>$user,
+											'updated_on'					=>$date
+										);
+										$this->db->where('program_code',$arr_program_code[$i] );
+										$this->db->where('category_code',$category_codes[$j] );
+										$sql = $this->db->update('program_category_setup', $update_data);
+										//echo $this->db->last_query();
+										if(!$sql){
+											$dbStatus = "ERROR";
+											$dbMessage = "Error Inserting";
+											//$dbError = ;	
+										}
+									}
+									else{
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = mysqli_error($con);	
+									}
+									
+								}
+								else{
+									$new_data = array(
+										'program_code' 					=>$arr_program_code[$i],
+										'category_code' 				=>$category_codes[$j],
+										'record_status' 				=>$show_status[$j],
+										'institute_code' 				=>$institute_code,
+										'created_by'					=>$user,
+										'created_on'					=>$date
+									);
+									
+									if($arr_program_code[$i] != "multiselect-all"){
+										$sql = $this->db->insert('program_category_setup', $new_data);
+										//echo $this->db->last_query();
+										if(!$sql){
+											$dbStatus = "ERROR";
+											$dbMessage = "Error Inserting";
+											//$dbError = ;	
+										}
+									}
+									else{
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = mysqli_error($con);	
+									}
+								}
+							}
+						}
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			// to get data for assign single category datatable
+			
+			case 'get_category_one':
+				//$institute = $_POST['institute'];
+				$program = $_POST['program'];
+				$this->db->select("B.category_code,B.category_name,CASE WHEN A.record_status IS NULL THEN '0' WHEN A.record_status = '1'THEN 1 ELSE 0 END AS record_status");
+				$this->db->from('category_master B');
+				$this->db->join('program_category_setup A','A.category_code = B.category_code','left');
+				$this->db->where('A.program_code',$program);
+				$this->db->order_by('B.id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// assigning single data
+			
+			case 'assign_single_category' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$arr_menu_code = array();
+				$program_code = $_POST['program_code'];
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				$this->db->select("B.category_code,B.category_name,CASE WHEN A.record_status IS NULL THEN '0' WHEN A.record_status = '1'THEN 1 ELSE 0 END AS record_status");
+				$this->db->from('category_master B');
+				$this->db->join('program_category_setup A','A.category_code = B.category_code','left');
+				$this->db->where('A.program_code',$program_code);
+				//$this->db->group_by('B.category_code');
+				$this->db->order_by('B.id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$i = 0;
+				$output_data = $result->result_array();
+				foreach ($output_data as $row) 
+	            {
+	            	$category = $row['category_code'];
+	            	$this->db->select("count(program_code) AS program_code");
+					$this->db->from('program_category_setup');
+					$this->db->where('program_code',$program_code);
+					$this->db->where('category_code',$category);
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'category_code' 				=>$category,
+								'record_status' 				=>$show_status[$i],
+								'institute_code' 				=>$institute_code,
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);
+							$this->db->where('program_code',$program_code );
+							$this->db->where('category_code',$category );
+							$sql = $this->db->update('program_category_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$program_code,
+								'category_code' 				=>$category,
+								'record_status' 				=>$show_status[$i],
+								'institute_code' 				=>$institute_code,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('program_category_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	                $i++;
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			// to get data for assign multiple exam centre datatable
+			
+			case 'get_exam_centre_all':
+				//$institute = $_POST['institute'];
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				$this->db->select("A.exam_centre_code,B.exam_centre_name");
+				$this->db->from('institute_exam_centre_setup A');
+				$this->db->join('exam_centre B','A.exam_centre_code = B.exam_centre_code','left');
+				$this->db->where('A.institute_code',$institute_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// to get data for assign multiple qualification datatable
+			
+			case 'get_qualification_multiple':
+				//$institute = $_POST['institute'];
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				
+				$this->db->select("CONCAT(qualification_code,'`',qualification_name) AS qualification_code");
+				$this->db->from('qualification_master');
+				//$this->db->order_by('program_qualification_setup.id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// assigning multiple data
+			
+			case 'assign_multiple_centre' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+				$arr_program_code = array();
+				$qualification_codes = array();
+				$arr_show_status = array();
+				$program_codes = $_POST['program_codes'];
+				$qualification_codes = $_POST['qualification_codes']?$_POST['qualification_codes']:'';
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					for($j=0;$j<sizeof($qualification_codes);$j++)
+					{
+						$count = 0;
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							$this->db->select("count(program_code) AS program_code");
+							$this->db->from('program_qualification_setup');
+							$this->db->where('program_code',$arr_program_code[$i]);
+							$this->db->where('qualification_code',$qualification_codes[$j]);
+							
+							$result = $this->db->get();
+							//echo $this->db->last_query();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+		            		{
+		            			$result = $aRow['program_code'];
+								if($result >= 1){
+									$update_data = array(
+										'record_status' 				=>$show_status[$j],
+										'updated_by'					=>$user,
+										'updated_on'					=>$date
+									);
+									$this->db->where('program_code',$arr_program_code[$i] );
+									$this->db->where('qualification_code',$qualification_codes[$j] );
+									$sql = $this->db->update('program_qualification_setup', $update_data);
+									//echo $this->db->last_query();
+									if(!$sql){
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = ;	
+									}
+									
+								}
+								else{
+									$new_data = array(
+										'program_code' 					=>$arr_program_code[$i],
+										'qualification_code' 			=>$qualification_codes[$j],
+										'record_status' 				=>$show_status[$j],
+										'created_by'					=>$user,
+										'created_on'					=>$date
+									);
+									$sql = $this->db->insert('program_qualification_setup', $new_data);
+									//echo $this->db->last_query();
+									if(!$sql){
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = ;	
+									}
+								}
+							}
+						}
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			// to get data for assign single category datatable
+			
+			case 'get_qualification_one':
+				//$institute = $_POST['institute'];
+				$program = $_POST['program'];
+				$this->db->distinct("CONCAT(A.qualification_code,'`',A.qualification_name) AS qualification_code");
+				$this->db->select("CONCAT(A.qualification_code,'`',A.qualification_name) AS qualification_code,CASE WHEN B.record_status IS NULL THEN '0' WHEN B.record_status = '1' THEN 1 ELSE '0' END AS record_status,A.qualification_name,A.id ");
+				$this->db->from('qualification_master A ');
+				$this->db->join('program_qualification_setup B','A.qualification_code = B.qualification_code','left');
+				$this->db->where('B.program_code',$program);
+				$this->db->order_by('A.id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// assigning single data
+			
+			case 'assign_single_qualification' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$arr_menu_code = array();
+				$program_code = $_POST['program_code'];
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				$this->db->select("qualification_code,qualification_name");
+				$this->db->from('qualification_master');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$i = 0;
+				$output_data = $result->result_array();
+				foreach ($output_data as $row) 
+	            {
+	            	$qualification_code = $row['qualification_code'];
+	            	$this->db->select("count(program_code) AS program_code");
+					$this->db->from('program_qualification_setup');
+					$this->db->where('program_code',$program_code);
+					$this->db->where('qualification_code',$qualification_code);
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'qualification_code' 			=>$qualification_code,
+								'record_status' 				=>$show_status[$i],
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);
+							$this->db->where('program_code',$program_code );
+							$this->db->where('qualification_code',$qualification_code );
+							$sql = $this->db->update('program_qualification_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$program_code,
+								'qualification_code' 			=>$qualification_code,
+								'record_status' 				=>$show_status[$i],
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('program_qualification_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	                $i++;
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			// to get data for assign multiple qualification datatable
+			
+			case 'get_fee_assign_multiple':
+				//$institute = $_POST['institute'];
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				$this->db->select("category_code,category_name,category_code as category");
+				$this->db->from('category_master ');
+				$this->db->where('record_status','1');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// assigning multiple data
+			
+			case 'assign_multiple_fee' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+        		$arr_program_code = array();
+				$arr_category_code = array();
+				$category_codes = array();
+				$arr_amt = array();
+				$program_codes = $_POST['program_codes'];
+				$category_codes = $_POST['category_codes']?$_POST['category_codes']:'';
+				//print_r($category_codes);
+				$amts = $_POST['amts']?$_POST['amts']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					for($j=0;$j<sizeof($category_codes);$j++)
+					{
+						$count = 0;
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							$this->db->select("count(program_code) AS program_code");
+							$this->db->from('program_fee_setup');
+							$this->db->where('program_code',$arr_program_code[$i]);
+							$this->db->where('category_code',$category_codes[$j]);
+							
+							$result = $this->db->get();
+							//echo $this->db->last_query();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+		            		{
+		            			$result = $aRow['program_code'];
+								if($result >= 1){
+									if($arr_program_code[$i] != "multiselect-all")
+									{
+										$update_data = array(
+											'category_code'					=>$category_codes[$j],
+											'amount' 						=>$amts[$j],
+											'updated_by'					=>$user,
+											'updated_on'					=>$date
+										);
+										$this->db->where('program_code',$arr_program_code[$i] );
+										$this->db->where('category_code',$category_codes[$j] );
+										$sql = $this->db->update('program_fee_setup', $update_data);
+										//echo $this->db->last_query();
+										if(!$sql){
+											$dbStatus = "ERROR";
+											$dbMessage = "Error Inserting";
+											//$dbError = ;	
+										}
+									}
+									else{
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = mysqli_error($con);	
+									}
+									
+								}
+								else{
+									$new_data = array(
+										'program_code' 					=>$arr_program_code[$i],
+										'category_code' 				=>$category_codes[$j],
+										'amount' 						=>$amts[$j],
+										'created_by'					=>$user,
+										'created_on'					=>$date
+									);
+									
+									if($arr_program_code[$i] != "multiselect-all"){
+										$sql = $this->db->insert('program_fee_setup', $new_data);
+										//echo $this->db->last_query();
+										if(!$sql){
+											$dbStatus = "ERROR";
+											$dbMessage = "Error Inserting";
+											//$dbError = ;	
+										}
+									}
+									else{
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = mysqli_error($con);	
+									}
+								}
+							}
+						}
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			// to get data for assign multiple vacancy
+			case 'assign_multiple_vacancy' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+        		$arr_program_code = array();
+				$arr_category_code = array();
+				$category_codes = array();
+				$arr_amt = array();
+				$program_codes = $_POST['program_codes'];
+				$category_codes = $_POST['category_codes']?$_POST['category_codes']:'';
+				//print_r($category_codes);
+				$vacancy = $_POST['vacancy']?$_POST['vacancy']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					for($j=0;$j<sizeof($category_codes);$j++)
+					{
+						$count = 0;
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							$this->db->select("count(program_code) AS program_code");
+							$this->db->from('program_vacancy_details');
+							$this->db->where('program_code',$arr_program_code[$i]);
+							$this->db->where('category_code',$category_codes[$j]);
+							
+							$result = $this->db->get();
+							//echo $this->db->last_query();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+		            		{
+		            			$result = $aRow['program_code'];
+								if($result >= 1){
+									if($arr_program_code[$i] != "multiselect-all")
+									{
+										$update_data = array(
+											'category_code'					=>$category_codes[$j],
+											'vacancy_no' 					=>$vacancy[$j],
+											'updated_by'					=>$user,
+											'updated_on'					=>$date
+										);
+										$this->db->where('program_code',$arr_program_code[$i] );
+										$this->db->where('category_code',$category_codes[$j] );
+										$sql = $this->db->update('program_vacancy_details', $update_data);
+										//echo $this->db->last_query();
+										if(!$sql){
+											$dbStatus = "ERROR";
+											$dbMessage = "Error Inserting";
+											//$dbError = ;	
+										}
+									}
+									else{
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = mysqli_error($con);	
+									}
+									
+								}
+								else{
+									$new_data = array(
+										'program_code' 					=>$arr_program_code[$i],
+										'category_code' 				=>$category_codes[$j],
+										'vacancy_no' 					=>$vacancy[$j],
+										'created_by'					=>$user,
+										'created_on'					=>$date
+									);
+									
+									if($arr_program_code[$i] != "multiselect-all"){
+										$sql = $this->db->insert('program_vacancy_details', $new_data);
+										//echo $this->db->last_query();
+										if(!$sql){
+											$dbStatus = "ERROR";
+											$dbMessage = "Error Inserting";
+											//$dbError = ;	
+										}
+									}
+									else{
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = mysqli_error($con);	
+									}
+								}
+							}
+						}
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			case 'get_vacancy_all':
+				//$institute = $_POST['institute'];
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				$this->db->select("category_code,category_name,category_code as category");
+				$this->db->from('category_master ');
+				$this->db->where('record_status','1');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// to get data for assign single vacancy
+			
+			case 'get_vacancy_single':
+				//$institute = $_POST['institute'];
+				$program = $_POST['program'];
+				$this->db->select("CONCAT(A.category_name,'`',A.category_code) AS category_name,CASE WHEN B.vacancy_no IS NULL THEN '0' ELSE B.vacancy_no END AS vacancy_no");
+				$this->db->from('category_master A');
+				$this->db->join('program_vacancy_details B','A.category_code = B.category_code','left');
+				$this->db->where('B.program_code',$program);
+				$this->db->where('B.record_status','1');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'assign_single_vacancy' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$cmbProgramNameEdit = $_POST['cmbProgramFilter'];
+				$cmbCategoryEdit = $_POST['cmbCategoryEdit'];
+				$txtAmountEdit = $_POST['txtAmountEdit'];
+				
+				for($i = 0; $i < sizeof($cmbCategoryEdit); $i++)
+	            {
+	            	$this->db->select("count(program_code) AS program_code");
+					$this->db->from('program_vacancy_details');
+					$this->db->where('program_code',$cmbProgramNameEdit);
+					$this->db->where('category_code',$cmbCategoryEdit[$i]);
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'category_code' 				=>$cmbCategoryEdit[$i],
+								'vacancy_no' 					=>$txtAmountEdit[$i],
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);
+							$this->db->where('program_code',$cmbProgramNameEdit );
+							$this->db->where('category_code',$cmbCategoryEdit[$i] );
+							$sql = $this->db->update('program_vacancy_details', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$cmbProgramNameEdit,
+								'category_code' 				=>$cmbCategoryEdit[$i],
+								'vacancy_no' 					=>$txtAmountEdit[$i],
+								'institute_code' 				=>$institute_code,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('program_fee_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			// to get data for assign single category datatable
+			
+			case 'get_fee_one':
+				//$institute = $_POST['institute'];
+				$program = $_POST['program'];
+				$this->db->select("CONCAT(A.category_name,'`',A.category_code) AS category_name,CASE WHEN B.amount IS NULL THEN '0' ELSE B.amount END AS amount");
+				$this->db->from('category_master A');
+				$this->db->join('program_fee_setup B','A.category_code = B.category_code','left');
+				$this->db->where('B.program_code',$program);
+				$this->db->where('B.record_status','1');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// assigning single data
+			
+			case 'assign_single_fee' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$cmbProgramNameEdit = $_POST['cmbProgramFilter'];
+				$cmbCategoryEdit = $_POST['cmbCategoryEdit'];
+				$txtAmountEdit = $_POST['txtAmountEdit'];
+				
+				for($i = 0; $i < sizeof($cmbCategoryEdit); $i++)
+	            {
+	            	$this->db->select("count(program_code) AS program_code");
+					$this->db->from('program_fee_setup');
+					$this->db->where('program_code',$cmbProgramNameEdit);
+					$this->db->where('category_code',$cmbCategoryEdit[$i]);
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'category_code' 				=>$cmbCategoryEdit[$i],
+								'amount' 						=>$txtAmountEdit[$i],
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);
+							$this->db->where('program_code',$cmbProgramNameEdit );
+							$this->db->where('category_code',$cmbCategoryEdit[$i] );
+							$sql = $this->db->update('program_fee_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$cmbProgramNameEdit,
+								'category_code' 				=>$cmbCategoryEdit[$i],
+								'amount' 						=>$txtAmountEdit[$i],
+								'institute_code' 				=>$institute_code,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('program_fee_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			case 'get_fee_assign_all_reeval':
+				//$institute = $_POST['institute'];
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				$this->db->select("category_code,category_name,category_code as category");
+				$this->db->from('category_master ');
+				$this->db->where('record_status','1');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// assigning multiple data
+			
+			case 'update_multiple_fee_reeval' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+        		$arr_program_code = array();
+				$arr_category_code = array();
+				$category_codes = array();
+				$arr_amt = array();
+				$program_codes = $_POST['program_codes'];
+				$category_codes = $_POST['category_codes']?$_POST['category_codes']:'';
+				//print_r($category_codes);
+				$amts = $_POST['amts']?$_POST['amts']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					for($j=0;$j<sizeof($category_codes);$j++)
+					{
+						$count = 0;
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							$this->db->select("count(program_code) AS program_code");
+							$this->db->from('reeval_fee_setup');
+							$this->db->where('program_code',$arr_program_code[$i]);
+							$this->db->where('category_code',$category_codes[$j]);
+							
+							$result = $this->db->get();
+							//echo $this->db->last_query();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+		            		{
+		            			$result = $aRow['program_code'];
+								if($result >= 1){
+									if($arr_program_code[$i] != "multiselect-all")
+									{
+										$update_data = array(
+											'category_code'					=>$category_codes[$j],
+											'amount' 						=>$amts[$j],
+											'updated_by'					=>$user,
+											'updated_on'					=>$date
+										);
+										$this->db->where('program_code',$arr_program_code[$i] );
+										$this->db->where('category_code',$category_codes[$j] );
+										$sql = $this->db->update('reeval_fee_setup', $update_data);
+										//echo $this->db->last_query();
+										if(!$sql){
+											$dbStatus = "ERROR";
+											$dbMessage = "Error Inserting";
+											//$dbError = ;	
+										}
+									}
+									else{
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = mysqli_error($con);	
+									}
+									
+								}
+								else{
+									$new_data = array(
+										'program_code' 					=>$arr_program_code[$i],
+										'category_code' 				=>$category_codes[$j],
+										'amount' 						=>$amts[$j],
+										'created_by'					=>$user,
+										'created_on'					=>$date
+									);
+									
+									if($arr_program_code[$i] != "multiselect-all"){
+										$sql = $this->db->insert('reeval_fee_setup', $new_data);
+										//echo $this->db->last_query();
+										if(!$sql){
+											$dbStatus = "ERROR";
+											$dbMessage = "Error Inserting";
+											//$dbError = ;	
+										}
+									}
+									else{
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = mysqli_error($con);	
+									}
+								}
+							}
+						}
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			// to get data for assign single category datatable
+			
+			case 'get_fee_single_reeval':
+				//$institute = $_POST['institute'];
+				$program = $_POST['program'];
+				$this->db->select("CONCAT(A.category_name,'`',A.category_code) AS category_name,CASE WHEN B.amount IS NULL THEN '0' ELSE B.amount END AS amount");
+				$this->db->from('category_master A');
+				$this->db->join('reeval_fee_setup B','A.category_code = B.category_code','left');
+				$this->db->where('B.program_code',$program);
+				$this->db->where('B.record_status','1');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			// assigning single data
+			
+			case 'update_single_fee_reeval' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				$cmbProgramNameEdit = $_POST['cmbProgramFilter'];
+				$cmbCategoryEdit = $_POST['cmbCategoryEdit'];
+				$txtAmountEdit = $_POST['txtAmountEdit'];
+				
+				for($i = 0; $i < sizeof($cmbCategoryEdit); $i++)
+	            {
+	            	$this->db->select("count(program_code) AS program_code");
+					$this->db->from('reeval_fee_setup');
+					$this->db->where('program_code',$cmbProgramNameEdit);
+					$this->db->where('category_code',$cmbCategoryEdit[$i]);
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'category_code' 				=>$cmbCategoryEdit[$i],
+								'amount' 						=>$txtAmountEdit[$i],
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);
+							$this->db->where('program_code',$cmbProgramNameEdit );
+							$this->db->where('category_code',$cmbCategoryEdit[$i] );
+							$sql = $this->db->update('reeval_fee_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$cmbProgramNameEdit,
+								'category_code' 				=>$cmbCategoryEdit[$i],
+								'amount' 						=>$txtAmountEdit[$i],
+								'institute_code' 				=>$institute_code,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('reeval_fee_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			// to get data for charge datatable
+			
+			case 'get_charge_data':
+				//$institute = $_POST['institute'];
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				$this->db->select("A.program_code,B.program_name,A.transaction_charge,CASE WHEN A.status = '1' THEN 'ACTIVE' WHEN A.status = '0' THEN 'INACTIVE' END AS status ");
+				$this->db->from('online_transaction_charge_setup A ');
+				$this->db->join('program_master B','A.program_code = B.program_code','left');
+				$this->db->where('A.institute_code',$institute_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			//----------------------------------test(susmita)-------------------------------------------
+			case 'get_test_data':
+				//$institute = $_POST['institute'];
+				/*$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;*/
+				$this->db->select("Sno,lname,DOB,contact,emailid,Gender,PAddress");
+				$this->db->from('test');
+				$this->db->where('record_status', 1);
+				//$this->db->join('program_master B','A.program_code = B.program_code','left');
+				//$this->db->where('A.institute_code',$institute_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	               $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	               $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'get_add_data': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Inserted Successfully";
+				
+				$lname =  $_POST['lname'];
+				$Dob =  $_POST['DOB'];
+			
+				$Con = $_POST['contact'];
+				$emailid = $_POST['emailid'];
+				$Gen = $_POST['Gender'];
+				
+				$Present = $_POST['PAddress'];
+				//$Facilities = $_POST['ulanguage'];
+				
+				//$uploaddir = "upload/files";
+            	
+			 	/*$program_codes = $_POST['programCodes'];
+				$txtCharge = $_POST['txtCharge'];
+				$cmbStatus = $_POST['cmbStatus'];
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+			 	$op_type = 'add_fee';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());*/
+				
+				
+							
+								$new_data = array(
+									'lname' 					=>$lname,
+									'DOB' 						=>$Dob,
+									'contact' 					=>$Con,
+									'emailid' 					=>$emailid,
+									'Gender'					=>$Gen,
+									'PAddress'					=>$Present
+									//'language'					=>$Facilities
+								);
+								
+								
+								$sql = $this->db->insert('test', $new_data);
+								//echo $this->db->last_query();
+								if(!$sql){
+									$dbStatus = "FALSE";
+									$dbMessage = "Error Inserting";
+									//$dbError = ;	
+								}
+							
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"dbMessage"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"dbMessage"=>$dbMessage);
+				}
+				return $output;	
+			break;
+			case 'get_edit_data': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+            	
+			 	$getID = $_POST['hidUniqueidEditTest'];
+				$lname = $_POST['ulname'];
+				$Dob = $_POST['uDOB'];
+				$Con = $_POST['ucontact'];
+				
+				$emailid = $_POST['uemailid'];
+				$Gen = $_POST['uGender'];
+				$Present = $_POST['uPAddress'];
+			 	//$Facilities = $_POST['ulanguage'];
+			 	
+				
+				$update_data = array(
+									'lname' 					=>$lname,
+									'DOB' 						=>$Dob,
+									'contact' 					=>$Con,
+									'emailid' 					=>$emailid,
+									'Gender'					=>$Gen,
+									'PAddress'					=>$Present
+									//'language'					=>$Facilities
+				);
+				$this->db->where('Sno',$getID);
+				//$this->db->where('institute_code',$institute_code);
+				$sql = $this->db->update('test', $update_data);
+				//echo $this->db->last_query();
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+					//$dbError = ;	
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"dbMessage"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"dbMessage"=>$dbMessage);
+				}
+				return $output;	
+			break;
+			case 'get_delete_data':  
+			
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Deleted Successfully";
+				$dbError = "";
+				
+				$delID = $_POST['id'];
+				//echo($delID);die();
+			 	//date_default_timezone_set('Asia/Kolkata');
+				//$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				$data = array('record_status'=>0);
+				$this->db->where('Sno', $delID);
+				$this->db->update('test', $data);
+				//echo $this->db->affected_rows();die();
+					
+				if($this->db->affected_rows() ==0){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Deleting";
+				}
+				$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+				
+				return $output; 
+			break;
+			//-------------------------------end test-----------------------------------
+			case 'add_fee': 
+			 
+				$dbStatus = "TRUE";
+				$dbMessage = "Inserted Successfully";
+            	
+			 	$program_codes = $_POST['programCodes'];
+				$txtCharge = $_POST['txtCharge'];
+				$cmbStatus = $_POST['cmbStatus'];
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+			 	$op_type = 'add_fee';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				for($i = 0; $i < sizeof($arr_program_code); $i++)
+	            {
+	            	if($arr_program_code[$i] != "multiselect-all")
+					{
+		            	$this->db->select("count(program_code) AS program_code");
+						$this->db->from('online_transaction_charge_setup');
+						$this->db->where('program_code',$arr_program_code[$i]);
+						
+						$result = $this->db->get();
+						$output_data = $result->result_array();
+						
+						foreach ($output_data as $aRow1) 
+	            		{
+	            			$result = $aRow1['program_code'];
+							if($result >= 1)
+							{
+								$update_data = array(
+									'transaction_charge' 			=>$txtCharge,
+									'status' 						=>$cmbStatus,
+									'modified_by'					=>$user,
+									'modified_on'					=>$date
+								);
+								$this->db->where('program_code',$arr_program_code[$i] );
+								$sql = $this->db->update('online_transaction_charge_setup', $update_data);
+								//echo $this->db->last_query();
+								if(!$sql){
+									$dbStatus = "FALSE";
+									$dbMessage = "Error Inserting";
+									//$dbError = ;	
+								}
+							}
+							else
+							{
+								$new_data = array(
+									'program_code' 					=>$arr_program_code[$i],
+									'transaction_charge' 			=>$txtCharge,
+									'status' 						=>$cmbStatus,
+									'institute_code' 				=>$institute_code,
+									'created_by'					=>$user,
+									'created_on'					=>$date
+								);
+								
+								
+								$sql = $this->db->insert('online_transaction_charge_setup', $new_data);
+								//echo $this->db->last_query();
+								if(!$sql){
+									$dbStatus = "FALSE";
+									$dbMessage = "Error Inserting";
+									//$dbError = ;	
+								}
+							}
+		                }
+		            }
+	            }
+				if($dbStatus == "TRUE")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;	
+			break;
+			
+			case 'edit_fee': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+            	
+			 	$hidUniqueidEdit = $_POST['hidUniqueidEdit'];
+				$cmbProgramCodeEdit = $_POST['cmbProgramCodeEdit'];
+				$txtChargeEdit = $_POST['txtChargeEdit'];
+				$cmbStatusEdit = $_POST['cmbStatusEdit'];
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+			 	$op_type = 'edit_fee';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				$update_data = array(
+					'program_code' 					=>$cmbProgramCodeEdit,
+					'transaction_charge' 			=>$txtChargeEdit,
+					'status' 						=>$cmbStatusEdit,
+					'modified_by'					=>$user,
+					'modified_on'					=>$date
+				);
+				$this->db->where('program_code',$hidUniqueidEdit);
+				$this->db->where('institute_code',$institute_code);
+				$sql = $this->db->update('online_transaction_charge_setup', $update_data);
+				//echo $this->db->last_query();
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+					//$dbError = ;	
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;	
+			break;
+			
+			case 'delete_feedata':  
+			
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Deleted Successfully";
+				$dbError = "";
+				
+				$id = $_POST['programCode'];
+				
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				$output = array();
+				
+				$this->db->where('program_code', $id);
+				$this->db->delete('online_transaction_charge_setup');
+				
+					
+				if($this->db->affected_rows() ==0){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Deleting";
+				}
+				$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+				
+				return $output; 
+			break;
+			
+			// to get all category in multiselect
+			
+			case 'get_program_data_manage_app' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+				$this->db->distinct("A.program_group_code");
+				$this->db->select("A.program_group_code, A.program_group_name");
+				$this->db->from('program_group_master A');
+				$this->db->join('program_master B','A.program_group_code = B.program_group','left');
+				$this->db->where('B.institute_code',$institute_code);
+				$this->db->where('A.record_status','1');
+				$this->db->where('B.publish_status','YES');
+				$this->db->group_by('A.program_group_code');
+				$this->db->order_by("A.sl_no");
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'get_round_no' :
+				$institute_code = $this->session->userdata('institute_code');
+				$selProgram = 'PROG_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program_code = $_POST['program_code'];
+				
+				$this->db->distinct("round_no");
+				$this->db->select("round_no");
+				$this->db->from('admitcard_round_data');
+				$this->db->where('program_code',$program_code);
+				$this->db->order_by('round_no');
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'get_admitcard_date' :
+				$institute_code = $this->session->userdata('institute_code');
+				$selProgram = 'PROG_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program_code = $_POST['program_code'];
+				
+				//$this->db->distinct("admitcard_start_date,admitcard_end_date");
+				$this->db->select("DATE_FORMAT(admitcard_start_date,'%d-%m-%Y') as admitcard_start_date,DATE_FORMAT(admitcard_end_date,'%d-%m-%Y') AS admitcard_end_date");
+				$this->db->from('program_master');
+				$this->db->where('program_code',$program_code);
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+			
+				foreach ($output_data as $aRow) 
+	            {
+	            	$admitcard_start_date = $aRow['admitcard_start_date'];
+	            	$admitcard_end_date = $aRow['admitcard_end_date'];
+	            }
+	            $output = array('admitcard_start_date'=> $admitcard_start_date,'admitcard_end_date' => $admitcard_end_date);
+	           	return $output;
+			break;
+			case 'select_registrations' :
+				$institute_code = $this->session->userdata('institute_code');
+				$selProgram = 'PROG_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				
+				$this->db->select("CONCAT(first_name,' ',mid_name,' ',last_name) AS full_name,applicant_reg_master.reg_user_id AS reg_user_id,email_id ,date_format(dob,'%d-%m-%Y') as dob, state_master.state_name");
+				$this->db->from('applicant_reg_master');
+				$this->db->join('state_master','applicant_reg_master.state=state_master.state_code','left');
+				$this->db->where('applicant_reg_master.status','1');
+				$this->db->where('applicant_reg_master.applied_program',$selProgram);
+				$this->db->order_by('applicant_reg_master.last_updated','DESC');
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'select_applications' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$program = $_POST['program'];
+				$program_group = $_POST['program_group'];
+				$program_type = $_POST['program_type'];
+				$selProgram = $program;
+				$appl_status = isset($_POST['appl_status'])?$_POST['appl_status']:'';
+				$reg_user_id = isset($_POST['reg_user_id'])?$_POST['reg_user_id']:'';
+				$payment_mode = isset($_POST['payment_mode'])?$_POST['payment_mode']:'';
+				
+				$strStatus=explode('_',$appl_status);
+				$appl_status=join(" ",$strStatus);
+				$payment_date = isset($_POST['payment_date'])?$_POST['payment_date']:'';
+				
+				$this->db->select("CONCAT(applicant_master.first_name,' ',applicant_master.mid_name,' ',applicant_master.last_name) AS full_name,applicant_master.reg_user_id AS reg_user_id,applicant_email ,program_name, appl_status,money_deposit_mode,DATE_FORMAT(applicant_appl_overview.updated_on,'%d-%m-%Y') AS appl_date,CASE WHEN appl_status = 'Verified' THEN 'YES' ELSE 'NO' END AS print,applicant_appl_overview.appl_no ");
+				$this->db->from('applicant_master');
+				$this->db->join('applicant_appl_overview','applicant_master.reg_user_id=applicant_appl_overview.reg_user_id AND applicant_master.applied_program = applicant_appl_overview.applied_program','left');
+				$this->db->join('applicant_form_fee_overview','applicant_appl_overview.appl_no=applicant_form_fee_overview.appl_no','left');
+				$this->db->join('program_master','applicant_appl_overview.applied_program=program_master.program_code','left');
+				$this->db->where('applicant_master.status','1');
+				$this->db->where('applicant_appl_overview.applied_program',$selProgram);
+				if($appl_status !='')
+				{
+					$this->db->where('appl_status',$appl_status);
+				}
+				if($reg_user_id !='')
+				{
+					$this->db->where('applicant_master.reg_user_id',$reg_user_id);
+				}
+				if($payment_mode !='')
+				{
+					$this->db->where('money_deposit_mode',$payment_mode);
+				}
+				if($payment_date !='')
+				{
+					$payment_date = date("Y-m-d", strtotime($payment_date));
+					$this->db->where('DATE(applicant_appl_overview.updated_on)',$payment_date);
+				}
+				$this->db->order_by("applicant_appl_overview.updated_on","desc");
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'select_program_manage_application' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+        		
+        		$program_group = $_POST['program_group'];
+        		$program_type = isset($_POST['program_type'])?$_POST['program_type']:'';
+        		if($program_type == 'Old')
+				{
+					$this->db->select('P.program_code,program_name');
+					$this->db->from('program_master P');
+					$this->db->join('user_program_mapping U ',' P.program_code = U.program_code','inner');
+					$this->db->where('P.institute_code',$institute_code);
+					$this->db->where('program_group',$program_group);
+					$this->db->where('apply_end_date <',$date);
+					$this->db->where('status','Active');
+					$this->db->where('P.record_status','1');
+					$this->db->where('P.publish_status','YES');
+					$this->db->where('U.record_status','1');
+					$this->db->where('U.institute_code',$institute_code);
+					$this->db->where('U.user_code',$user);
+				}
+				else if($program_type == 'Current')
+				{
+					$this->db->select('P.program_code,program_name');
+					$this->db->from('program_master P');
+					$this->db->join('user_program_mapping U ',' P.program_code = U.program_code','inner');
+					$this->db->where('P.institute_code',$institute_code);
+					$this->db->where('program_group',$program_group);
+					$this->db->where('apply_end_date >=',$date);
+					$this->db->where('status','Active');
+					$this->db->where('P.record_status','1');
+					$this->db->where('U.record_status','1');
+					$this->db->where('U.institute_code',$institute_code);
+					$this->db->where('U.user_code',$user);
+				}
+				else
+				{
+					$this->db->select('P.program_code,program_name');
+					$this->db->from('program_master P');
+					$this->db->where('P.institute_code',$institute_code);
+					$this->db->where('program_group',$program_group);
+					$this->db->where('apply_end_date >=',$date);
+					$this->db->where('status','Active');
+					$this->db->where('P.publish_status','YES');
+					$this->db->where('P.record_status','1');
+				}
+				
+				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'edit_manage_applications': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+            	
+            	$program = $_POST['program'];
+				$reg_user_id = $_POST['reg_user_id'];
+				$mode = $_POST['mode'];
+				$file_name = '';
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				if($program != ''){
+					$this->db->select('B.file_name');
+					$this->db->from('program_master A');
+					$this->db->join('form_template_master B ',' A.template_code = B.template_code','inner');
+					$this->db->where('A.program_code',$program);
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $aRow) 
+	            	{
+	            		$output['aaData'][] = $aRow;
+	            		$file_name = $aRow['file_name'];
+	            	}
+	            	$this->session->set_userdata('admcode', $program);
+	            	$this->session->set_userdata('reg_user_id', $reg_user_id);
+	            	$this->session->set_userdata('mode', $mode);
+				}
+				return array('file_name' => $file_name);
+				return $output;	
+			break;
+			
+			case 'get_applicant_details_scrutiny' :
+				$institute_code = $this->session->userdata('institute_code');
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program =  isset($_POST['program'])? $_POST['program']:'';
+				$app_date = isset($_POST['app_date'])? $_POST['app_date']:'';
+				$status = isset($_POST['status'])? $_POST['status']:'';
+				
+				if($app_date != '')
+					$app_date = date('Y-m-d', strtotime($app_date));
+				
+				if($app_date == '' && $status == '' )
+				{
+					$this->db->select("C.index_no,B.reg_user_id,B.full_name,B.scrutiny_status,B.scrutiny_remark,C.appl_no, email_id, B.applied_program");
+					
+					$this->db->from('applicant_master B');
+					$this->db->join('applicant_appl_overview C ','B.reg_user_id = C.reg_user_id AND B.applied_program = C.applied_program','inner');
+					$this->db->join('applicant_reg_master AS arm','arm.reg_user_id = B.reg_user_id','inner');
+					$this->db->where('B.applied_program',$program);
+					$this->db->where('C.appl_status','Verified');
+					$this->db->order_by('C.index_no');
+				}
+				else if($app_date == '' && $status != '')
+				{
+					$this->db->select("C.index_no,B.reg_user_id,B.full_name,B.scrutiny_status,B.scrutiny_remark, C.appl_no, email_id");
+					
+					$this->db->from('applicant_master B');
+					$this->db->join('applicant_appl_overview C ','B.reg_user_id = C.reg_user_id AND B.applied_program = C.applied_program','inner');
+					$this->db->join('applicant_reg_master AS arm','arm.reg_user_id = B.reg_user_id','inner');
+					$this->db->where('B.applied_program',$program);
+					$this->db->where('B.scrutiny_status',$status);
+					$this->db->where('C.appl_status','Verified');
+					$this->db->order_by('C.index_no');
+				}
+				else if($app_date != '' && $status == '')
+				{
+					$this->db->select("C.index_no,B.reg_user_id,B.full_name,A.scrutiny_status,A.scrutiny_remark, C.appl_no, email_id");
+					
+					$this->db->join('applicant_master B');
+					$this->db->join('applicant_appl_overview C ','B.reg_user_id = C.reg_user_id AND B.applied_program = C.applied_program','inner');
+					$this->db->join('applicant_reg_master AS arm','arm.reg_user_id = B.reg_user_id','inner');
+					$this->db->where('B.applied_program',$program);
+					$this->db->where('DATE(C.updated_on)',$app_date);
+					$this->db->where('C.appl_status','Verified');
+					$this->db->order_by('C.index_no');
+				}
+				else
+				{
+					$this->db->select("C.index_no,B.reg_user_id,B.full_name,A.scrutiny_status,A.scrutiny_remark,C.appl_no, email_id");
+					
+					$this->db->join('applicant_master B');
+					$this->db->join('applicant_appl_overview C ','B.reg_user_id = C.reg_user_id AND B.applied_program = C.applied_program','inner');
+					$this->db->join('applicant_reg_master AS arm','arm.reg_user_id = B.reg_user_id','inner');
+					$this->db->where('B.applied_program',$program);
+					$this->db->where('DATE(C.updated_on)',$app_date);
+					$this->db->where('B.scrutiny_status',$status);
+					$this->db->where('C.appl_status','Verified');
+					$this->db->order_by('C.index_no');
+				}
+				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				//die();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_program_group_scrutiny_applicants' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				$this->db->distinct("P.program_group");
+				$this->db->select("P.program_group");
+				$this->db->from('program_master P');
+				$this->db->join('user_program_mapping U','P.program_code = U.program_code ','inner');
+				$this->db->join('program_group_master A ','P.program_group = A.program_group_name','inner');
+				$this->db->where('P.institute_code',$institute_code);
+				$this->db->where('U.institute_code',$institute_code);
+				$this->db->where('U.user_code',$user);
+				$this->db->where('P.publish_status','YES');
+				$this->db->where('P.record_status','1');
+				$this->db->where('U.record_status','1');
+				$this->db->where('A.record_status','1');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_program_scrutiny_applicants' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_group =  isset($_POST['program_group'])? $_POST['program_group']:'';
+        		
+				$this->db->select("P.program_code,program_name");
+				$this->db->from('program_master P');
+				$this->db->join('user_program_mapping U','P.program_code = U.program_code ','inner');
+				$this->db->where('P.institute_code',$institute_code);
+				$this->db->where('program_group',$program_group);
+				$this->db->where('U.institute_code',$institute_code);
+				$this->db->where('U.user_code',$user);
+				$this->db->where('status','Active');
+				$this->db->where('publish_status','YES');
+				$this->db->where('U.record_status','1');
+				$this->db->where('P.record_status','1');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'get_pgcode_scrutiny_applnts' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_group =  isset($_POST['program_group'])? $_POST['program_group']:'';
+        		
+				$this->db->select("pg_code");
+				$this->db->from('pg_parameter_values');
+				$this->db->where('school_code',$institute_code);
+				$this->db->group_by('pg_code');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'get_status_scrutiny_applnts' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		//$program_group =  isset($_POST['program_group'])? $_POST['program_group']:'';
+        		
+				$this->db->select("deposit_status");
+				$this->db->from('applicant_form_online_deposit');
+				$this->db->group_by('deposit_status');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'program_group_sbi_applicants' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_group =  isset($_POST['program_group'])? $_POST['program_group']:'';
+        		
+				$this->db->distinct("A.program_group_code");
+				$this->db->select("A.program_group_code, A.program_group_name");
+				$this->db->from('program_group_master A');
+				$this->db->join('program_master B','A.program_group_code = B.program_group','inner');
+				$this->db->where('B.institute_code',$institute_code);
+				$this->db->where('A.record_status','1');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'program_sbi_applicants' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_group =  isset($_POST['program_group'])? $_POST['program_group']:'';
+        		
+				$this->db->select("P.program_code,program_name");
+				$this->db->from('program_master P');
+				$this->db->join('user_program_mapping U ','P.program_code = U.program_code ','inner');
+				$this->db->where('P.institute_code',$institute_code);
+				$this->db->where('P.program_end_date >=',$date);
+				$this->db->where('P.program_group',$program_group);
+				$this->db->where('P.status','Active');
+				$this->db->where('P.record_status','1');
+				$this->db->where('U.record_status','1');
+				$this->db->where('U.institute_code',$institute_code);
+				$this->db->where('U.user_code',$user);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'applnt_details_sbi' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$selProgram =  isset($_POST['program'])? $_POST['program']:'';
+        		$this->session->set_userdata('program', $selProgram);
+        		
+				$this->db->select("CONCAT(first_name,' ',IFNULL('',mid_name),' ',last_name) AS full_name,applicant_reg_master.reg_user_id AS reg_user_id,money_receipt_no,amount,DATE_FORMAT(applicant_form_fee_overview.depositdate,'%d-%m-%Y') AS depositdate,bank_code,bank_branch,applicant_form_documents.document_path as challan_path,applicant_reg_master.applied_program");
+				$this->db->from('applicant_reg_master');
+				$this->db->join('applicant_appl_overview ','applicant_reg_master.reg_user_id=applicant_appl_overview.reg_user_id AND applicant_reg_master.applied_program=applicant_appl_overview.applied_program','LEFT');
+				$this->db->join('applicant_form_fee_overview','applicant_appl_overview.appl_no=applicant_form_fee_overview.appl_no','LEFT');
+				$this->db->join('applicant_form_challan_deposit','applicant_appl_overview.appl_no=applicant_form_challan_deposit.appl_no','LEFT');
+				$this->db->join('applicant_form_documents','applicant_appl_overview.appl_no=applicant_form_documents.appl_no and applicant_form_documents.document_type="CHALLAN"','LEFT');
+				$this->db->where('reg_status','verified');
+				$this->db->where('appl_status','Fee Paid');
+				$this->db->where('applicant_form_fee_overview.money_deposit_mode','CHALLAN');
+				$this->db->where('applicant_reg_master.applied_program',$selProgram);
+				$this->db->where('applicant_reg_master.status','1');
+				$this->db->order_by('applicant_reg_master.id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'check_instruction' :
+				$cmbPageCode = $_POST['cmbPageCode'];
+				$this->db->select("page_code");
+				$this->db->from('instruction_setup');
+				$this->db->where('page_code',$cmbPageCode);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'check_instructionEdit' :
+				$cmbPageCodeEdit = $_POST['cmbPageCodeEdit'];
+				$this->db->select("page_code");
+				$this->db->from('instruction_setup');
+				$this->db->where('page_code',$cmbPageCodeEdit);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'verify_sbi_applnts' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$now = date("Y-m-d H:i:s");
+        		$dbstatus = FALSE;
+        		
+        		$reg_id =  isset($_POST['reg_user_id'])? $_POST['reg_user_id']:'';
+        		$selProgram = $this->session->userdata('program');
+        		
+				$this->db->select("id,program_name,program_code,DATE_FORMAT(program_end_date,'%d-%m-%Y') AS program_end_date");
+				$this->db->from('program_master');
+				$this->db->where('program_code',$selProgram);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$dbstatus = TRUE;
+					$admname = $row['program_name'];
+					$admcode = $row['program_code'];
+					$program_end_date = $row['program_end_date'];
+	            }
+	            
+	            
+	            
+	            
+	            $this->db->select("reg_mode,email_id,last_grade,pin");
+				$this->db->from('applicant_reg_master A');
+				$this->db->join('applicant_master B','A.reg_user_id = B.reg_user_id AND A.applied_program =  B.applied_program','INNER');
+				$this->db->where('A.reg_user_id',$reg_id);
+				$this->db->where('A.applied_program',$selProgram);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row4) 
+	            {
+	            	$dbstatus = TRUE;
+					$Email = $row4['email_id'];
+					$pass_status = $row4['last_grade'];
+					$pin = $row4['pin'];
+	            }
+	            
+	            $this->db->select("index_no");
+				$this->db->from('applicant_appl_overview');
+				$this->db->where('reg_user_id',$reg_id);
+				$this->db->where('applied_program',$selProgram);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row1) 
+	            {
+	            	$dbstatus = TRUE;
+					$index_no = $row1['index_no'];
+	            }
+	            $index = $index_no;
+				$sequence_no = 0;
+				
+				if($index_no == '')
+				{
+					$this->db->select("A.program_code,A.year,A.sequence_code,sequence_no");
+					$this->db->from('index_sequence_setup A');
+					$this->db->where('A.program_code',$selProgram);
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $row1) 
+		            {
+		            	$dbstatus = TRUE;
+						$year = $row1['year'];
+						$sequence_no = $row1['sequence_no'];
+						$key = $row1['sequence_code'];
+		            }
+					$year_str = substr($year,'-2');
+						
+						
+					if($sequence_no < 10)
+						$changed_sl_no = '00'.$sequence_no;
+					else if($sequence_no < 100)
+						$changed_sl_no = '0'.$sequence_no;
+					else
+						$changed_sl_no = $sequence_no;
+							
+					$index_no = $year_str.'/'.$key.'/'.$changed_sl_no;
+					
+				}
+	            
+	            $applicant_address_array4 = array(
+					'appl_status' => 'Verified',
+					'index_no' => $index_no,
+					'updated_by' => $reg_id,
+					'updated_on' => $now
+				);
+				$this->db->where('reg_user_id',$reg_id);
+				$this->db->where('applied_program',$selProgram);
+				$update_applicant = $this->db->update('applicant_appl_overview',$applicant_address_array4);
+				
+				$this->db->select("appl_no");
+				$this->db->from('applicant_appl_overview');
+				$this->db->where('reg_user_id',$reg_id);
+				$this->db->where('applied_program',$selProgram);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row1) 
+	            {
+	            	$dbstatus = TRUE;
+					$application_no = $row1['appl_no'];
+	            }
+				
+				$update_applicant_qualification_array = array(
+					'id' => NULL,
+					'reg_user_id' => $reg_id,
+					'appl_no' => $application_no,
+					'form_no' => $application_no,
+					'applied_program' => $selProgram,
+					'appl_status' => 'Verified',
+					'created_by' => $reg_id,
+					'created_on' => $now
+				);
+				$this->db->insert('applicant_appl_overview_history',$update_applicant_qualification_array);
+				$new_seq_no = $sequence_no + 1;
+				
+				if($index == '')
+				{
+					$applicant_address_array5 = array(
+						'sequence_no' => $new_seq_no
+					);
+					$this->db->where('program_code',$selProgram);
+					$update_applicant = $this->db->update('index_sequence_setup',$applicant_address_array5);
+					$dbstatus = TRUE;
+				}
+				
+				
+				$applicant_address_array6 = array(
+					'collectiondate' => $date,
+					'deposit_status' => 'Deposited',
+					'updated_by' => $reg_id,
+					'updated_on' => $now,
+				);
+				$this->db->where('appl_no',$application_no);
+				$update_applicant = $this->db->update('applicant_form_challan_deposit',$applicant_address_array6);
+				
+				
+				$this->db->select("program_name"); 	
+				$this->db->from("program_master"); 	
+				$this->db->where('program_code ',$selProgram);
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				//echo $this->db->last_query();
+				foreach($output_data as $row)
+				{
+					$program_name = $row['program_name'];
+				}
+				
+				$this->db->select("email_id,first_name,mid_name,last_name"); 	
+				$this->db->from("applicant_reg_master"); 	
+				$this->db->where('reg_user_id ',$reg_id);
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				//echo $this->db->last_query();
+				foreach($output_data as $row)
+				{
+					$email = $row['email_id'];
+					$first_name = $row['first_name'];
+					$mid_name = $row['mid_name'];
+					$last_name = $row['last_name'];
+				}
+				$name = $first_name.' '.$mid_name.' '.$last_name;
+				
+				
+				$this->db->select('host_name , port_no,email_id,password,smtp_auth,smtp_secure');
+				$this->db->from('email_provider_setup');
+				$this->db->where('record_status','1');
+				$this->db->limit('1');
+				$result = $this->db->get();
+				$query = $result->result_array();
+				
+				$row_count = $result->num_rows();
+				foreach($result->result_array() AS $row1)
+				{
+					$host_name = $row1['host_name'];
+					$port_no = $row1['port_no'];
+					$email_id = $row1['email_id'];
+					$password = $row1['password'];
+					$smtp_auth = $row1['smtp_auth'];
+					$smtp_secure = $row1['smtp_secure'];
+				}
+				
+				$this->db->select('es.email_type,es.subject,es.content');
+				$this->db->from('email_setup es');
+				$this->db->join('program_email_setup pes','es.email_type = pes.email_type','inner');
+				$this->db->where('es.email_type','SUBMISSION');
+				$this->db->where('pes.institute_code',HARDCODE_INSTITUTE_CODE);
+				$this->db->limit('1');
+				$result = $this->db->get();
+				$query = $result->result_array();
+				//echo $this->db->last_query();
+				$row_count = $result->num_rows();
+				foreach($result->result_array() AS $row1)
+				{
+					$email_type=$row1['email_type'];
+					$subject=$row1['subject'];
+					$content=$row1['content'];
+				}
+				$this->load->library('email');
+					
+
+				/*$body = "You have successfully Registered with mobile no as $phone_no and date of birth as $dob_mail for $admName program.";*/
+				/*$txtSubject = "Registration Successful";*/
+				
+				//$find = array("[name]");
+				//$replace = array($name);
+				//$smsURL = str_replace($subject,$find,$replace);	
+				
+				/*$config['protocol']    = 'smtp';
+				$config['smtp_host']    = 'ssl://smtp.gmail.com';
+				$config['smtp_port']    = '465';
+				$config['smtp_timeout'] = '10';
+				$config['smtp_user']    = $email_id;
+				$config['smtp_pass']    = $password;
+				$config['charset']    = 'utf-8';
+				$config['newline']    = "\r\n";
+				$config['mailtype'] = 'html'; // or text
+				$config['validation'] = TRUE; // bool whether to validate email or not   */
+				
+				$config['protocol']    = 'smtp';
+				$config['smtp_host']    = 'mail.cipet.gov.in'; //'ssl://smtp.gmail.com';
+				$config['smtp_port']    = '25';
+				$config['smtp_timeout'] = '30';
+				$config['smtp_user']    = "eadmission@cipet.gov.in";
+				$config['smtp_pass']    = "AE*694!edgoin";
+				$config['charset']    = 'utf-8';
+				$config['newline']    = "\r\n";
+				$config['mailtype'] = 'html'; // or text
+				$config['validation'] = TRUE; // bool whether to validate email or not  
+				
+				
+				$this->email->initialize($config);
+				$this->email->from('eadmission@cipet.gov.in', 'CIPET ADMISSION 2018');
+				$this->email->to($email); 
+
+				$this->email->subject($subject);
+				
+				$find = array("[name]", "[course_name]");
+				$replace = array($name, $program_name);
+				$email_content = str_replace($find, $replace, $content);//find and replace uid and pwd in url
+
+				$this->email->message($email_content);  
+
+				if($pin !='71717'){
+					if($this->email->send()){
+						$dbStatus = TRUE; 
+						$dbMessage = 'A mail is forwarded to your registered mail id ';
+					}
+					else{
+						$dbStatus = FALSE; 
+						$dbMessage = 'Unable to sent Mail.Please Contact for Support';
+						$this->email->print_debugger();
+					}
+				
+					$this->db->select("REPLACE (A.sms_url,'amp;','') AS sms_url,A.user_name,A.password,A.sender,B.content");
+					$this->db->from('sms_provider_setup A');
+					$this->db->join('sms_setup B','A.provider_name = B.provider_name','INNER');
+					$this->db->where('B.record_status','1');
+					$this->db->where('A.record_status','1');
+					$this->db->where('B.sms_type','SUBMISSION OF CHALLAN');
+					$this->db->where('B.status','ACTIVE');
+					$result = $this->db->get();
+					/*ECHO $this->db->last_query();
+					die();*/
+					$output_data = $result->result_array();
+					foreach ($output_data as $row1) 
+					{
+						$sms_url = $row1['sms_url'];
+						$user_name = $row1['user_name'];
+						$password = addslashes($row1['password']);
+						$sender = $row1['sender'];
+						$content = $row1['content'];
+						//$program = $row1['program_name'];
+						//$institute_name = $row1['institute_name'];
+						$find = array("[mobile_no]", "[subject]");
+						$replace = array($reg_id, $content);
+						$new_sms_url = str_replace($find, $replace, $sms_url);//find and replace uid and pwd in url
+						
+						if($program_name == 'Diploma in Plastics Mould Technology (DPMT)')
+						{
+							$program = 'DPMT';
+						}
+						else if($program_name == 'Postgraduate Diploma in Plastics Processing & Testing (PGD-PPT)')
+						{
+							$program = 'PGD-PPT';
+						}
+						else if($program_name == 'Post Diploma in Plastics Mould Design with CAD&sol;CAM (PD-PMD with CAD / CAM)')
+						{
+							$program = 'PD-PMD with CAD / CAM';
+						}
+						else if($program_name == 'Diploma in Plastics Technology (DPT)')
+						{
+							$program = 'DPT';
+						}
+						else if($program_name == 'Postgraduate Diploma in Plastics Testing and Quality Control (PGD-PTQC)')
+						{
+							$program = 'PGD-PTQC';
+						}
+						
+						$findappl = array("[program_code]");
+						$replaceappl = array($program);
+						//echo $content."<br>";
+						$new_content = str_replace($findappl, $replaceappl, $content);
+						$messageToSend = rawurlencode($new_content);
+						//echo $new_sms_url."<br>";
+						//echo $new_content."<br>";
+						//echo $messageToSend;
+						
+						//find replace url with mobileno and message
+						$findmobileNo = array("[mobile_no]","[subject]");
+						$replacemobileNo = array($reg_id,$messageToSend);
+						$smsURL = str_replace($findmobileNo,$replacemobileNo,$sms_url);	
+					}
+					$done = file_get_contents($smsURL);
+				}
+				else{
+					
+				}
+				
+				$contact_no = $reg_id;  //$contact_no .= ','.$row['people_contact_no'];(for comma separated mobile no)
+			
+				return array('status' => $dbstatus);
+			break;
+			case 'get_exam_centre_single':
+				//$institute = $_POST['institute'];
+				$institute_code = $this->session->userdata('institute_code');
+				$program_code = $_POST['program'];
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				$this->db->select("CASE WHEN A.program_code IS NULL THEN '$program_code' ELSE A.program_code END AS  program_code,
+					C.exam_centre_code,C.exam_centre_name,
+					CASE WHEN A.record_status IS NULL THEN '0' WHEN A.record_status = '0' THEN '0' ELSE '1' END AS record_status");
+				$this->db->from('exam_centre C');
+				$this->db->join('exam_centre_master A','C.exam_centre_code = A.exam_centre_code','left');
+				$this->db->join('institute_exam_centre_setup B','B.exam_centre_code = A.exam_centre_code','left');
+				$this->db->where('B.institute_code',$institute_code);
+				$this->db->where('A.program_code',$program_code);
+				$this->db->where('C.record_status',1);
+				$this->db->group_by('C.exam_centre_code,A.record_status');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			break;
+			case 'get_reject_sbi_applnts':
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$now = date("Y-m-d H:i:s");
+        		$dbStatus = TRUE;
+        		$dbMessage = 'SUCCESS';
+        		$reg_id =  isset($_POST['hidRegUserId'])? $_POST['hidRegUserId']:'';
+        		$selProgram =  isset($_POST['hidProgram'])? $_POST['hidProgram']:'';
+        		$taRemark =  isset($_POST['taRemark'])? $_POST['taRemark']:'';
+				$this->db->select("appl_no,arm.email_id,pm.program_name,first_name"); 	
+				$this->db->from("applicant_appl_overview aao"); 	
+				$this->db->join("applicant_reg_master arm","aao.reg_user_id=arm.reg_user_id and aao.applied_program=arm.applied_program","INNER"); 	
+				$this->db->join("program_master pm","pm.program_code=aao.applied_program","INNER"); 	
+				$this->db->where('aao.applied_program',$selProgram);
+				$this->db->where('aao.reg_user_id ',$reg_id);
+				$result = $this->db->get();
+				//echo $this->db->last_query();die();
+				foreach($result->result_array() as $row)
+				{
+					$application_no = $row['appl_no'];
+					$email_id = $row['email_id'];
+					$program_name = $row['program_name'];
+					$first_name = $row['first_name'];
+				}
+				
+				$this->db->where('appl_no',$application_no);
+				$applicant_form_challan_deposit_result = $this->db->get('applicant_form_challan_deposit');
+				$output_val = $applicant_form_challan_deposit_result->result_array()[0];
+				
+				
+				$applicant_address_array6 = array(
+					'appl_no' => $application_no,
+					'money_deposit_mode' => $output_val['money_deposit_mode'],
+					'depositdate' => $output_val['depositdate'],
+					'challan_bank' => $output_val['challan_bank'],
+					'challan_number' => $output_val['challan_number'],
+					'bank_code' => $output_val['bank_code'],
+					'bank_branch' => $output_val['bank_branch'],
+					'collectiondate' => $output_val['collectiondate'],
+					'deposit_status' => 'Declined',
+					'remark' => $taRemark,
+					'created_by' => $output_val['created_by'],
+					'created_on' => $output_val['created_on'],
+					'updated_by' => $reg_id,
+					'updated_on' => $now,
+				);
+				
+				$update_applicant = $this->db->insert('applicant_form_challan_deposit_history',$applicant_address_array6);
+				
+				
+				$this->db->where('appl_no', $application_no);
+				$this->db->delete('applicant_form_challan_deposit');
+				
+				$applicant_address_array4 = array(
+					'appl_status' => 'Document Uploaded',
+					'updated_by' => $user,
+					'updated_on' => $now
+				);
+				$this->db->where('appl_no',$application_no);
+				$this->db->where('applied_program',$selProgram);
+				$update_applicant_overview = $this->db->update('applicant_appl_overview',$applicant_address_array4);
+				
+				$update_applicant_overview_history_array = array(
+					'reg_user_id' => $reg_id,
+					'appl_no' => $application_no,
+					'form_no' => $application_no,
+					'applied_program' => $selProgram,
+					'appl_status' => 'Verified',
+					'created_by' => $user,
+					'created_on' => $now
+				);
+				$update_applicant_overview_history = $this->db->insert('applicant_appl_overview_history',$update_applicant_overview_history_array);
+				if($update_applicant_overview_history){
+					$this->db->select('es.email_type,es.subject,es.content');
+					$this->db->from('email_setup es');
+					$this->db->join('program_email_setup pes','es.email_type = pes.email_type','inner');
+					$this->db->where('es.email_type','CHALLAN_REJECT');
+					$this->db->where('pes.institute_code',HARDCODE_INSTITUTE_CODE);
+					$this->db->limit('1');
+					$result = $this->db->get();
+					$query = $result->result_array();
+					//echo $this->db->last_query();die();
+					$row_count = $result->num_rows();
+					foreach($result->result_array() AS $row1)
+					{
+						$email_type=$row1['email_type'];
+						$subject=$row1['subject'];
+						$content=$row1['content'];
+					}
+					$this->load->library('email');
+					$config['protocol']    = 'smtp';
+					$config['smtp_host']    = 'mail.cipet.gov.in'; //'ssl://smtp.gmail.com';
+					$config['smtp_port']    = '25';
+					$config['smtp_timeout'] = '30';
+					$config['smtp_user']    = "eadmission@cipet.gov.in";
+					$config['smtp_pass']    = "AE*694!edgoin";
+					$config['charset']    = 'utf-8';
+					$config['newline']    = "\r\n";
+					$config['mailtype'] = 'html'; // or text
+					$config['validation'] = TRUE; // bool whether to validate email or not   
+					$this->email->initialize($config);
+					$this->email->from("eadmission@cipet.gov.in", 'CIPET ADMISSION 2018');
+					$this->email->to($email_id);
+				  
+
+					$this->email->subject($subject);
+					
+					$find = array("[name]", "[course_code]", "[reason]" );
+					$replace = array($first_name, $program_name,$taRemark);
+					$email_content = str_replace($find, $replace, $content);//find and replace uid and pwd in url
+
+					$this->email->message($email_content);  
+					
+					if($this->email->send()){
+						$dbStatus = TRUE; 
+						$dbMessage = 'A mail is forwarded to your registered mail id ';
+					}
+					else{
+						$dbStatus = FALSE; 
+						$dbMessage = 'Unable to sent Mail.Please Contact for Support';
+						//$this->email->print_debugger();
+					}
+				}else{
+					
+					$dbStatus = "ERROR";
+					$dbMessage = "Error While Rejecting";
+				}
+				
+				$this->db->select("REPLACE (A.sms_url,'amp;','') AS sms_url,A.user_name,A.password,A.sender,B.content");
+				$this->db->from('sms_provider_setup A');
+				$this->db->join('sms_setup B','A.provider_name = B.provider_name','INNER');
+				$this->db->where('B.record_status','1');
+				$this->db->where('A.record_status','1');
+				$this->db->where('B.sms_type','REJECTION OF CHALLAN');
+				$this->db->where('B.status','ACTIVE');
+				$result = $this->db->get();
+				
+				$output_data = $result->result_array();
+				foreach ($output_data as $row1) 
+				{
+					$sms_url = $row1['sms_url'];
+					$user_name = $row1['user_name'];
+					$password = addslashes($row1['password']);
+					$sender = $row1['sender'];
+					$content = $row1['content'];
+					//$program = $row1['program_name'];
+					//$institute_name = $row1['institute_name'];
+					$find = array("[mobile_no]", "[subject]");
+					$replace = array($reg_id, $content);
+					
+					$new_sms_url = str_replace($find, $replace, $sms_url);//find and replace uid and pwd in url
+					
+					if($program_name == 'Diploma in Plastics Mould Technology (DPMT)')
+					{
+						$program = 'DPMT';
+					}
+					else if($program_name == 'Postgraduate Diploma in Plastics Processing & Testing (PGD-PPT)')
+					{
+						$program = 'PGD-PPT';
+					}
+					else if($program_name == 'Post Diploma in Plastics Mould Design with CAD&sol;CAM (PD-PMD with CAD / CAM)')
+					{
+						$program = 'PD-PMD with CAD / CAM';
+					}
+					else if($program_name == 'Diploma in Plastics Technology (DPT)')
+					{
+						$program = 'DPT';
+					}
+					else if($program_name == 'Postgraduate Diploma in Plastics Testing and Quality Control (PGD-PTQC)')
+					{
+						$program = 'PGD-PTQC';
+					}
+					
+					$findappl = array("[program_code]");
+					$replaceappl = array($program);
+					//echo $content."<br>";
+					$new_content = str_replace($findappl, $replaceappl, $content);
+					$messageToSend = rawurlencode($new_content);
+					
+					$findmobileNo = array("[mobile_no]","[subject]");
+					$replacemobileNo = array($reg_id,$messageToSend);
+					$smsURL = str_replace($findmobileNo,$replacemobileNo,$sms_url);	
+				}
+				$done = file_get_contents($smsURL);
+				
+				$output = array('status'=>$dbStatus,'msg'=>$dbMessage);
+				return $output;
+			break;
+			case 'disqualify_scrutiny_applicants': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+            	
+            	$program =  isset($_POST['hidProgram'])? $_POST['hidProgram']:'';
+				$reg_user_id =  isset($_POST['hidRegUserId'])? $_POST['hidRegUserId']:'';
+				$remark =  isset($_POST['taRemark'])? $_POST['taRemark']:'';
+				$hidName =  isset($_POST['hidName'])? $_POST['hidName']:''; //echo $hidName;die();
+				$hidEmail =  isset($_POST['hidEmail'])? $_POST['hidEmail']:''; //echo $hidEmail;die();
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				$update_data = array(
+					'scrutiny_status' 				=>'Invalid',
+					'scrutiny_remark' 				=>$remark
+				);
+				$this->db->where('reg_user_id',$reg_user_id);
+				$this->db->where('applied_program',$program);
+				$sql = $this->db->update('applicant_master', $update_data); //echo $this->db->affected_rows();die();
+				//echo $this->db->last_query();
+				if($this->db->affected_rows() == 0){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+					//$dbError = ;	
+				}
+				else
+				{
+					$this->db->select('host_name , port_no,email_id,password,smtp_auth,smtp_secure');
+					$this->db->from('email_provider_setup');
+					$this->db->where('record_status','1');
+					$this->db->limit('1');
+					$result = $this->db->get();
+					$query = $result->result_array();
+					
+					$row_count = $result->num_rows();
+					foreach($result->result_array() AS $row1)
+					{
+						$host_name = $row1['host_name'];
+						$port_no = $row1['port_no'];
+						$email_id = $row1['email_id'];
+						$password = $row1['password'];
+						$smtp_auth = $row1['smtp_auth'];
+						$smtp_secure = $row1['smtp_secure'];
+					}
+					
+					$this->db->select('es.email_type,es.subject,es.content');
+					$this->db->from('email_setup es');
+					$this->db->join('program_email_setup pes','es.email_type = pes.email_type','inner');
+					$this->db->where('es.email_type','INVALID APPLICATION');
+					$this->db->where('pes.institute_code','APPSC');
+					$this->db->limit('1');
+					$result = $this->db->get();
+					$query = $result->result_array();
+					
+					$row_count = $result->num_rows();
+					foreach($result->result_array() AS $row1)
+					{
+						$email_type=$row1['email_type'];
+						$subject=$row1['subject'];
+						$content=$row1['content'];
+					}
+					if($row_count > 0)
+					{
+						//echo 'hi';
+						if($hidEmail != '')
+						{
+							$this->load->library('email');
+							
+							/*$body = "You have successfully Registered with mobile no as $phone_no and date of birth as $dob for $admName program.";
+							$txtSubject = "Registration Successful";*/
+							
+							$config['protocol']    = 'smtp';
+							$config['smtp_host']    = 'ssl://smtp.gmail.com';
+							$config['smtp_port']    = $port_no;
+							$config['smtp_timeout'] = '7';
+							$config['smtp_user']    = $email_id;
+							$config['smtp_pass']    = $password;
+							$config['charset']    = 'utf-8';
+							$config['newline']    = "\r\n";
+							$config['mailtype'] = 'html'; // or text
+							$config['validation'] = TRUE; // bool whether to validate email or not   
+							$this->email->initialize($config);
+							 
+
+							$email_content = str_replace("[name]",$hidName,$content);
+							//$email_content = str_replace($find, $replace, $content);//find and replace uid and pwd in url
+							$this->email->from($email_id, 'INVALID APPLICATION');
+							$this->email->to($hidEmail);
+							$this->email->subject($subject);
+							$this->email->message($email_content);
+							//$this->email->message($body);  
+
+							if($this->email->send()){
+							    $dbStatus = TRUE; 
+							    $dbMessage = 'A mail is forwarded to your registered mail id  ';
+						    }
+						    else{
+						    	/*print_r($this->email->print_debugger());
+								echo $this->email->print_debugger();die();*/
+							    $dbStatus = FALSE; 
+							    $dbMessage = 'Unable to sent Mail.Please Contact for Support';
+						    }
+						}
+					}
+					
+					$this->db->select("REPLACE (A.sms_url,'amp;','') AS sms_url,A.user_name,A.password,A.sender,B.content");
+					$this->db->from('sms_provider_setup A');
+					$this->db->join('sms_setup B','A.provider_name = B.provider_name','INNER');
+					$this->db->where('B.record_status','1');
+					$this->db->where('A.record_status','1');
+					$this->db->where('B.sms_type','INVALID APPLICATION');
+					$this->db->where('B.status','ACTIVE');
+					$result = $this->db->get();
+					/*ECHO $this->db->last_query();
+					die();*/
+					$output_data = $result->result_array();
+					foreach ($output_data as $row1) 
+			        {
+			        	$sms_url = $row1['sms_url'];
+						$user_name = $row1['user_name'];
+						$password = addslashes($row1['password']);
+						$sender = $row1['sender'];
+						$content = $row1['content'];
+						$messageToSend = rawurlencode($content);
+						//echo $new_sms_url."<br>";
+						//echo $new_content."<br>";
+						//echo $messageToSend;
+						
+						//find replace url with mobileno and message
+						$findmobileNo = array("[mobileno]","[message]","[username]","[password]","[sender]");
+						$replacemobileNo = array($reg_user_id,$messageToSend,$user_name,$password,$sender);
+						$smsURL = str_replace($findmobileNo,$replacemobileNo,$sms_url);	
+			        }
+			        /*echo $smsURL;
+			        die();*/
+			        $ch = curl_init($smsURL );
+					curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+					$result = curl_exec($ch);
+					curl_close($ch);
+					
+					$this->db->select("REPLACE (A.sms_url,'amp;','') AS sms_url,A.user_name,A.password,A.sender,B.content,D.program_name");
+					$this->db->from('sms_provider_setup A');
+					$this->db->join('sms_setup B','A.provider_name = B.provider_name','inner');
+					$this->db->join('program_sms_setup C','B.sms_type = C.sms_type','inner');
+					$this->db->join('program_master D','C.program_code = D.program_code','inner');
+					$this->db->where('C.record_status','1');
+					$this->db->where('B.sms_type','INVALID APPLICATION');
+					$this->db->where('B.status','ACTIVE');
+					$this->db->where('B.record_status','1');
+					$this->db->where('C.program_code','HELPER_APPSC');
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$messageToSend = '';
+					$new_sms_url = '';
+					$new_content = '';
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $row1) 
+					{
+					    $sms_url = $row1['sms_url'];
+						$user_name = $row1['user_name'];
+						$password = addslashes($row1['password']);
+						$sender = $row1['sender'];
+						$content = $row1['content'];
+						$program = $row1['program_name'];
+						$find = array("[username]", "[password]", "[sender]");
+						$replace = array($user_name, $password, $sender);
+						$new_sms_url = str_replace($find, $replace, $sms_url);//find and replace uid and pwd in url
+						$findappl = array("[program name]","[start date]","[end date]");
+						$replaceappl = array($program,$start_date,$end_date);
+						$new_content = str_replace($findappl, $replaceappl, $content);
+						$messageToSend = urlencode($new_content);
+						$findmobileNo = array("[mobileno]","[message]");
+						$replacemobileNo = array($reg_user_id,$messageToSend);
+						$smsURL = str_replace($findmobileNo,$replacemobileNo,$new_sms_url);	
+					}
+					$ch = curl_init($smsURL);
+					curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+					$result = curl_exec($ch);
+					curl_close($ch);
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;	
+			break;
+			
+			case 'qualify_scrutiny_applicants': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+            	
+				$program =  isset($_POST['program'])? $_POST['program']:'';
+				$reg_user_id =  isset($_POST['reg_user_id'])? $_POST['reg_user_id']:'';
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				$update_data = array(
+					'scrutiny_status' 				=>'Valid',
+					'scrutiny_remark' 				=>''
+				);
+				$this->db->where('reg_user_id',$reg_user_id);
+				$this->db->where('applied_program',$program);
+				$sql = $this->db->update('applicant_master', $update_data);
+				//echo $this->db->last_query();
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+					//$dbError = ;	
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;	
+			break;
+			
+			case 'get_template_scrutiny_applicants' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program =  isset($_POST['program'])? $_POST['program']:'';
+        		
+				$this->db->select("A.template_code,B.file_name,B.template_name");
+				$this->db->from('program_master A');
+				$this->db->join('form_template_master B','A.template_code = B.template_code','inner');
+				$this->db->where('A.program_code',$program);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	            	$file_name = $aRow['file_name'];
+					$temp_code = $aRow['template_code'];
+					$temp = explode(".",$file_name);
+					$temp_name = $temp[0];
+					$output = $temp_name;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'program_group_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		
+				$this->db->distinct("A.program_group_code, A.program_group_name");
+				$this->db->select("A.program_group_code, A.program_group_name");
+				$this->db->from('program_group_master A');
+				$this->db->join('program_master B','A.program_group_code = B.program_group','inner');
+				$this->db->where('B.institute_code',$institute_code);
+				$this->db->where('B.publish_status','YES');
+				$this->db->where('A.record_status','1');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'program_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_type = $_POST['program_type'];
+				$program_group = $_POST['program_group'];
+				
+				if($program_type == 'Old')
+				{
+					$this->db->select("program_code,program_name");
+					$this->db->from('program_master');
+					$this->db->where('institute_code',$institute_code);
+					$this->db->where('program_group',$program_group);
+					$this->db->where('program_end_date <',$date);
+					$this->db->where('publish_status','YES');
+					$this->db->where('record_status','1');
+					$this->db->where('status','Active');
+				}
+				else
+				{
+					$this->db->select("program_code,program_name");
+					$this->db->from('program_master');
+					$this->db->where('institute_code',$institute_code);
+					$this->db->where('program_group',$program_group);
+					$this->db->where('program_end_date >=',$date);
+					$this->db->where('publish_status','YES');
+					$this->db->where('record_status','1');
+					$this->db->where('status','Active');
+				}
+				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'exam_centre_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				$program_code = $_POST['program_code'];
+				
+				$this->db->select("A.exam_centre_code,B.exam_centre_name");
+				$this->db->from('exam_centre_master A ');
+				$this->db->join('exam_centre B','A.exam_centre_code = B.exam_centre_code','left');
+				$this->db->where('A.program_code',$program_code);
+				$this->db->where('A.record_status','1');
+				
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'exam_venue_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				$program_code = $_POST['program_code'];
+				$exam_center_code = $_POST['exam_centre_code'];
+            	$round_data = isset($_POST['round_data']) ? $_POST['round_data'] : '';
+				
+				$this->db->select("exam_vanue_code,exam_vanue");
+				$this->db->from('admitcard_setup');
+				$this->db->where('program_code',$program_code);
+				$this->db->where('exam_center_code',$exam_center_code);
+				$this->db->where('round',$round_data);
+				$this->db->where('record_status','1');
+				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'change_program_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_code = $_POST['program_code'];
+				$reg_user_id = $_POST['reg_user_id'];
+        		
+				$this->db->select("A.appl_no,B.full_name,B.dob");
+				$this->db->from('applicant_appl_overview A');
+				$this->db->join('applicant_master B','A.reg_user_id = B.reg_user_id AND A.applied_program = B.applied_program','inner');
+				$this->db->where('A.reg_user_id',$reg_user_id);
+				$this->db->where('B.applied_program',$program_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+				return $output;
+	           
+			break;
+			case 'change_program' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				$program_group = $_POST['program_group'];
+				$program_code = $_POST['program_code'];
+        		
+				$this->db->select("program_code,program_name");
+				$this->db->from('program_master');
+				$this->db->where('program_group',$program_group);
+				$this->db->where('program_code!=',$program_code);
+				$this->db->where('institute_code',$institute_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+				return $output;
+	           
+			break;
+			
+				case 'get_check_mobile_number_change_dob' :
+			
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_code = $_POST['program_code'];
+				$reg_user_id = $_POST['reg_user_id'];
+				//$change_reg_user_id = $_POST['change_reg_user_id'];
+				
+				$this->db->select("count(reg_user_id) as cnt");
+				$this->db->from('applicant_master');
+				$this->db->where('reg_user_id',$reg_user_id);
+				$this->db->where('applied_program',$program_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $row) 
+	            {
+	                $output['aaData'][] = $row['cnt'];
+	            }
+				return $output;
+	           
+			break;
+			case 'get_change_dob' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_code = $_POST['program_code'];
+				$reg_user_id = $_POST['reg_user_id'];
+				$change_dob = $_POST['change_dob'];
+				$change_dob1 = date('Y-m-d', strtotime($change_dob));
+				
+				
+				$this->db->select("appl_no");
+				$this->db->from('applicant_appl_overview');
+				$this->db->where('reg_user_id',$reg_user_id);
+				$this->db->where('applied_program',$program_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				//$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	                $application_no = $row['appl_no'];
+	            }
+	            
+	            $this->db->select("A.template_code,B.file_name,B.template_name");
+				$this->db->from('program_master A');
+				$this->db->join('form_template_master B','A.template_code = B.template_code','inner');
+				$this->db->where('A.program_code',$program_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				//$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	                $file_name = $row['file_name'];
+					$temp_code = $row['template_code'];
+					$temp_name = explode(".",$file_name);
+					$print_function = $temp_name[0]."_pdf";
+	            }
+	            
+	            $prog = 'PROG_'.$institute_code;
+	            
+	            $applicant_reg_master = array(
+					'dob' => $change_dob1
+				);
+				$this->db->where('applied_program',$prog);
+				$this->db->where('reg_user_id',$reg_user_id);
+				$query = $this->db->update('applicant_reg_master',$applicant_reg_master);
+				$dob_word = $this->convertBirthdateToText(date("d-m-Y", strtotime($change_dob1) ));
+				
+				$applicant_master = array(
+					'dob' => $change_dob1,
+					'dob_in_word' => $dob_word
+				);
+				$this->db->where('reg_user_id',$reg_user_id);
+				$query = $this->db->update('applicant_master',$applicant_master);
+				//echo $this->db->last_query();
+	            $output = "Registered DOB Successfully Changed";
+	            $status = TRUE;
+	            $this->session->set_userdata('reg_user_id',$reg_user_id);
+	            $this->session->set_userdata('admcode',$program_code);
+	            $this->session->set_userdata('appl_no',$application_no);
+            	//$objMpdf = new Mpdf_controller();
+				$controllerInstance = & get_instance();
+    			$return = $controllerInstance->$print_function();
+	            //$return = $print_function();
+	            
+				if($return == true)
+				{
+					if(file_exists(DOCUMENT_UPLOAD_URL.'/DOCUMENTS/'.$program_code.'/'.$application_no.'/application_print.pdf'))
+					{
+						//mysqli_commit($con);
+						$output = "Successfully Changed";
+						$status = TRUE;
+						$this->session->set_userdata('reg_user_id','');
+			            $this->session->set_userdata('admcode','');
+			            $this->session->set_userdata('appl_no','');
+						//$_SESSION['reg_user_id'] = '';
+						//$_SESSION['admcode'] = '';
+					}
+					else
+					{
+						//mysqli_rollback($con);
+						$output = "Error_in_pdf_save";
+						$status = FALSE;
+						$this->session->set_userdata('reg_user_id','');
+			            $this->session->set_userdata('admcode','');
+			            $this->session->set_userdata('appl_no','');
+						//$_SESSION['reg_user_id'] = '';
+						//$_SESSION['admcode'] = '';
+					}
+				}
+				else
+				{
+					//mysqli_rollback($con);
+					$output = "Error_in_pdf_generate";
+					$status = FALSE;
+					//$_SESSION['reg_user_id'] = '';
+					//$_SESSION['admcode'] = '';
+				}
+	            
+				$outputs = array('msg'=>$output,'status'=>$status);
+				return $outputs;
+	           
+			break;
+			
+			case 'change_program_admit_card_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_code = $_POST['program_code'];
+				$reg_user_id = $_POST['reg_user_id'];
+				$appl_no = $_POST['appl_no'];
+				$change_program_code = $_POST['change_program_code'];
+        		
+				$this->db->select("A.template_code,B.file_name,B.template_name");
+				$this->db->from('program_master A');
+				$this->db->join('form_template_master B','A.template_code = B.template_code','inner');
+				$this->db->where('A.program_code',$program_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				//$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	                $file_name = $row['file_name'];
+					$temp_code = $row['template_code'];
+					$temp_name = explode(".",$file_name);
+					$print_function = $temp_name[0]."_pdf";
+	            }
+	            
+	            $this->db->select("program_code,year,sl_no");
+				$this->db->from('program_master');
+				$this->db->where('program_code',$change_program_code);
+				$this->db->where('STATUS','Active');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				//$output = array("aaData" => array());
+				foreach ($output_data as $result) 
+	            {
+	                $sl_no = $result['sl_no'];
+					$new_program_code = $result['program_code'];
+					$year = $result['year'];
+	            }
+	            
+	            $new_sl_no = $sl_no + 1;
+				$changed_sl_no = '';
+				if($new_sl_no < 10)
+					$changed_sl_no = '00000'.$new_sl_no;
+				else if($new_sl_no < 100)
+					$changed_sl_no = '0000'.$new_sl_no;
+				else if($new_sl_no < 1000)
+					$changed_sl_no = '000'.$new_sl_no;
+				else if($new_sl_no < 10000)
+					$changed_sl_no = '00'.$new_sl_no;
+				else if($new_sl_no < 100000)
+					$changed_sl_no = '0'.$new_sl_no;
+				
+				$application_no = $new_program_code.$year.$changed_sl_no;
+		
+				$src = DOCUMENT_UPLOAD_URL."/DOCUMENTS/$program_code/$appl_no";
+				$dst = DOCUMENT_UPLOAD_URL."/DOCUMENTS/$change_program_code/$application_no";
+				$this->recurse_copy($src,$dst);
+				
+				$regUpdate = FALSE;
+				$applUpdate = FALSE;
+				$query = FALSE;
+				
+				$this->db->trans_start();
+				
+				$this->db->select("count(applied_program) as cnt");
+				$this->db->from('applicant_master');
+				$this->db->where('applied_program',$program_code);
+				$this->db->where('reg_user_id',$reg_user_id);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				//$output = array("aaData" => array());
+				foreach ($output_data as $result) 
+	            {
+	                $cnt = $result['cnt'];
+	            }
+	            if($cnt > 0)
+	            {
+					$output = "Program already exists";
+					$status = FALSE;
+				}
+				else
+				{
+					$applicant_reg_master = array(
+						'applied_program' => $change_program_code
+					);
+					$this->db->where('reg_user_id',$reg_user_id);
+					$this->db->where('applied_program',$program_code);
+					$regUpdate = $this->db->update('applicant_master',$applicant_reg_master);
+					
+					$applicant_appl_overview = array(
+						'appl_no' => $application_no
+					);
+					$this->db->where('reg_user_id',$reg_user_id);
+					$this->db->where('applied_program',$change_program_code);
+					$this->db->where('appl_no',$appl_no);
+					$applUpdate = $this->db->update('applicant_appl_overview',$applicant_appl_overview);
+					
+					$program_master = array(
+						'sl_no' => $new_sl_no
+					);
+					$this->db->where('program_code',$change_program_code);
+					$this->db->where('STATUS','Active');
+					$query = $this->db->update('program_master',$program_master);
+					
+					if($regUpdate and $applUpdate and $query)
+					{
+						
+						$db_application_log = array(
+										'reg_user_id' => $reg_user_id,
+										'change_from_program' => $program_code,
+										'change_to_program' => $change_program_code,
+										'change_from_appl_no' => $appl_no,
+										'change_to_appl_no' => $application_no,
+										'change_status' => 'SUCCESS',
+										'log_datetime' => $date
+									);
+						$this->db->insert('db_application_log',$db_application_log);
+						
+						$this->db->select("document_path,document_type");
+						$this->db->from('applicant_form_documents');
+						$this->db->where('appl_no',$application_no);
+						$result = $this->db->get();
+						//echo $this->db->last_query();
+						$output_data = $result->result_array();
+						//$output = array("aaData" => array());
+						$allDocs = array();
+						foreach ($output_data as $row) 
+			            {
+			               $allDocs[] = $row;
+			            }
+						
+						foreach($allDocs as $row)
+						{
+							$arr = '';
+							$document_type = $row['document_type'];
+							$arr = explode('/',$row['document_path']);
+							$file_name = end($arr);
+							$new_path = BASE_ADM_URL."/esdocuments/admission/$change_program_code/$application_no/$file_name";
+							$new_doc_id = $application_no.'_'.$document_type;
+							
+							$applicant_form_documents = array(
+								'doc_id' => $new_doc_id,
+								'document_path' => $new_path
+							);
+							$this->db->where('document_type',$document_type);
+							$this->db->where('appl_no',$application_no);
+							$uQuery = $this->db->update('applicant_form_documents',$applicant_form_documents);
+						}
+						//$_SESSION['reg_user_id'] = $reg_user_id;
+						//$_SESSION['admcode'] = $change_program_code;
+						$this->session->set_userdata('reg_user_id',$reg_user_id);
+			            $this->session->set_userdata('admcode',$change_program_code);
+						
+						//$objMpdf = new Mpdf_controller();
+						$controllerInstance = & get_instance();
+		    			$return = $controllerInstance->$print_function();
+						if($return == true)
+						{
+							if(file_exists(DOCUMENT_UPLOAD_URL.'/DOCUMENTS/'.$change_program_code.'/'.$application_no.'/application_print.pdf'))
+							{
+								$this->db->trans_complete();
+								$output = "Successfully Changed";
+								$status = TRUE;
+								$this->session->set_userdata('reg_user_id','');
+			           			$this->session->set_userdata('admcode','');
+								//$_SESSION['reg_user_id'] = '';
+								//$_SESSION['admcode'] = '';
+							}
+							else
+							{
+								$this->db->trans_rollback();
+								$output = "Error_in_pdf_save";
+								$status = FALSE;
+								$this->session->set_userdata('reg_user_id','');
+			           			$this->session->set_userdata('admcode','');
+							}
+						}
+						else
+						{
+							$this->db->trans_rollback();
+							$output = "Error_in_pdf_generate";
+							$status = FALSE;
+							$_SESSION['reg_user_id'] = '';
+							$_SESSION['admcode'] = '';
+						}
+						
+						
+					}	
+					else 
+					{
+						
+						$db_application_log = array(
+										'reg_user_id' => $reg_user_id,
+										'change_from_program' => $program_code,
+										'change_to_program' => $change_program_code,
+										'change_from_appl_no' => $appl_no,
+										'change_to_appl_no' => $application_no,
+										'change_status' => 'FAILURE'
+									);
+						$this->db->insert('db_application_log',$db_application_log);
+						
+						$this->db->trans_rollback();
+						$status = FALSE;
+						$output = "Something is wrong. Program Not Changed";
+					}
+					
+				}
+				
+				
+	            
+	            
+	            
+				
+	            $outputs = array('msg'=>$output,'status'=>$status);
+				return $outputs;
+	           
+			break;
+			case 'check_mobile_admit_card_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_code = $_POST['program_code'];
+				$reg_user_id = $_POST['reg_user_id'];
+				$change_reg_user_id = $_POST['change_reg_user_id'];
+				
+				$this->db->select("count(reg_user_id) as cnt");
+				$this->db->from('applicant_reg_master');
+				$this->db->where('reg_user_id',$change_reg_user_id);
+				$this->db->where('applied_program',$program_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $row) 
+	            {
+	                $output['aaData'][] = $row['cnt'];
+	            }
+				return $output;
+	           
+			break;
+			case 'change_mobile_admit_card_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$program_code = $_POST['program_code'];
+				$reg_user_id = $_POST['reg_user_id'];
+				$change_reg_user_id = $_POST['change_reg_user_id'];
+				
+				$this->db->select("appl_no");
+				$this->db->from('applicant_appl_overview');
+				$this->db->where('reg_user_id',$reg_user_id);
+				$this->db->where('applied_program',$program_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				foreach ($output_data as $row) 
+	            {
+	                $application_no = $row['appl_no'];
+	            }
+	            
+	            $this->db->select("A.template_code,B.file_name,B.template_name");
+				$this->db->from('program_master A');
+				$this->db->join('form_template_master B','A.template_code = B.template_code','inner');
+				$this->db->where('A.program_code',$program_code);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				foreach ($output_data as $row) 
+	            {
+	                $file_name = $row['file_name'];
+					$temp_code = $row['template_code'];
+					$temp_name = explode(".",$file_name);
+					$print_function = $temp_name[0]."_pdf";
+	            }
+	            $prog = 'PROG_'.$institute_code;
+	            $status = FALSE;
+	            $this->db->select("count(applied_program) as cnt");
+				$this->db->from('applicant_reg_master');
+				$this->db->where('applied_program',$prog);
+				$this->db->where('reg_user_id',$change_reg_user_id);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				//$output = array("aaData" => array());
+				foreach ($output_data as $result) 
+	            {
+	                $cnt = $result['cnt'];
+	            }
+	            if($cnt > 0)
+	            {
+					$output = "Already mobile no. exists";
+					$status = FALSE;
+				}
+				else
+				{
+					$applicant_reg_master = array(
+						'reg_user_id' => $change_reg_user_id
+					);
+					$this->db->where('applied_program',$prog);
+					$this->db->where('reg_user_id',$reg_user_id);
+					$applicant_reg_master_query = $this->db->update('applicant_reg_master',$applicant_reg_master);
+					
+					$applicant_master = array(
+						'reg_user_id' => $change_reg_user_id
+					);
+					$this->db->where('applied_program',$program_code);
+					$this->db->where('reg_user_id',$reg_user_id);
+					$applicant_master_query = $this->db->update('applicant_master',$applicant_master);
+					//echo $this->db->last_query();
+		            $output = "Registered Mobile Successfully Changed";
+		            $status = TRUE;
+		            $this->session->set_userdata('reg_user_id',$change_reg_user_id);
+		            $this->session->set_userdata('admcode',$program_code);
+		            $this->session->set_userdata('appl_no',$application_no);
+		            
+		            $this->db->select("REPLACE (A.sms_url,'amp;','') AS sms_url,A.user_name,A.password,A.sender,B.content");
+					$this->db->from('sms_provider_setup A');
+					$this->db->join('sms_setup B','A.provider_name = B.provider_name','INNER');
+					$this->db->where('B.record_status','1');
+					$this->db->where('A.record_status','1');
+					$this->db->where('B.sms_type','CHANGE_MOBILE_NUMBER');
+					$this->db->where('B.status','ACTIVE');
+					$result = $this->db->get();
+					/*ECHO $this->db->last_query();
+					die();*/
+					$output_data = $result->result_array();
+					foreach ($output_data as $row1) 
+			        {
+			        	$sms_url = $row1['sms_url'];
+						$user_name = $row1['user_name'];
+						$password = addslashes($row1['password']);
+						$sender = $row1['sender'];
+						$content = $row1['content'];
+						//$program = $row1['program_name'];
+						//$institute_name = $row1['institute_name'];
+						$find = array("[mobile_no]", "[subject]");
+						$replace = array($phone_no, $content);
+						$new_sms_url = str_replace($find, $replace, $sms_url);//find and replace uid and pwd in url
+						$findappl = array("[phone_no]", "[dob]");
+						$replaceappl = array($phone_no,$dob_mail);
+						//echo $content."<br>";
+						//$new_content = str_replace($findappl, $replaceappl, $content);
+						$new_content = $content;
+						$messageToSend = rawurlencode($new_content);
+						//echo $new_sms_url."<br>";
+						//echo $new_content."<br>";
+						//echo $messageToSend;
+						
+						//find replace url with mobileno and message
+						$findmobileNo = array("[mobileno]","[message]","[username]","[password]","[sender]");
+						$replacemobileNo = array($change_reg_user_id,$messageToSend,$user_name,$password,$sender);
+						$smsURL = str_replace($findmobileNo,$replacemobileNo,$sms_url);	
+			        }
+			        /*echo $smsURL;
+			        die();*/
+			        $ch = curl_init($smsURL );
+					curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+					$result = curl_exec($ch);
+					curl_close($ch);
+					
+	            	//$objMpdf = new Mpdf_controller();
+					$controllerInstance = & get_instance();
+	    			$return = $controllerInstance->$print_function();
+		            //$return = $print_function();
+		            
+					if($applicant_reg_master_query and $applicant_master_query and $return)
+					{
+						if(file_exists(DOCUMENT_UPLOAD_URL.'/DOCUMENTS/'.$program_code.'/'.$application_no.'/application_print.pdf'))
+						{
+							//mysqli_commit($con);
+							$output = "Successfully Changed";
+							$this->session->set_userdata('reg_user_id','');
+				            $this->session->set_userdata('admcode','');
+				            $this->session->set_userdata('appl_no','');
+		            		$status = TRUE;
+							//$_SESSION['reg_user_id'] = '';
+							//$_SESSION['admcode'] = '';
+						}
+						else
+						{
+							//mysqli_rollback($con);
+							$output = "Error_in_pdf_save";
+							$this->session->set_userdata('reg_user_id','');
+				            $this->session->set_userdata('admcode','');
+				            $this->session->set_userdata('appl_no','');
+		            		$status = FALSE;
+							//$_SESSION['reg_user_id'] = '';
+							//$_SESSION['admcode'] = '';
+						}
+					}
+					else
+					{
+						//mysqli_rollback($con);
+						$output = "Error_in_pdf_generate";
+		            	$status = FALSE;
+						//$_SESSION['reg_user_id'] = '';
+						//$_SESSION['admcode'] = '';
+					}
+				}
+	            
+	            $outputs = array('msg'=>$output,'status'=>$status);
+				return $outputs;
+	            
+	           
+			break;
+			
+			case 'applicants_program_name_admit_setup': 
+            	
+            	$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+				$sel_exam_center = isset($_POST['applied_exam_center_code']) ? $_POST['applied_exam_center_code'] : '';
+				$application_date = isset($_POST['applied_date']) ? $_POST['applied_date'] : '';
+			 	
+				$this->db->select("program_name, program_code");
+				$this->db->from('program_master');
+				$this->db->where('program_code',$sel_program);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$sel_program_code = $row['program_code'];
+					$sel_program_name = $row['program_name'];
+	            }
+				$output = array('program_code'=>$sel_program_code,'program_name'=>$sel_program_name);
+			
+				return $output; 
+			break;
+			
+			case 'applicants_exam_centre_name_admit_setup': 
+            	
+            	$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+				$sel_exam_center = isset($_POST['applied_exam_center_code']) ? $_POST['applied_exam_center_code'] : '';
+				$application_date = isset($_POST['applied_date']) ? $_POST['applied_date'] : '';
+			 	
+				$this->db->select("exam_centre_code, exam_centre_name");
+				$this->db->from('exam_centre_master');
+				$this->db->where('program_code',$sel_program);
+				$this->db->where('exam_centre_code',$sel_exam_center);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$sel_exam_center_code = $row['exam_centre_code'];
+					$sel_exam_center_name = $row['exam_centre_name'];
+	            }
+				$output = array('exam_center_code'=>$sel_exam_center_code,'exam_center_name'=>$sel_exam_center_name);
+			
+				return $output; 
+			break;
+			
+			case 'applicants_centre_admit_setup': 
+            	
+            	$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+			 	
+				$this->db->select("A.exam_centre_code,B.exam_centre_name");
+				$this->db->from('exam_centre_master A ');
+				$this->db->join('exam_centre B','A.exam_centre_code = B.exam_centre_code','LEFT');
+				$this->db->where('program_code',$sel_program);
+				$this->db->where('A.record_status','1');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'applicants_capacity_admit_setup': 
+            	
+            	$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+				$exam_vanue = isset($_POST['vanue']) ? $_POST['vanue'] : '';
+				$exam_center_code = isset($_POST['center']) ? $_POST['center'] : '';
+			 	
+				$this->db->select("A.capacity,COUNT(B.id) AS no_of_assign");
+				$this->db->from('admitcard_setup A');
+				$this->db->join('admitcard_published B','A.program_code = B.applied_program 
+				AND A.exam_center_code = B.assigned_exam_center AND A.exam_vanue_code = B.assigned_exam_vanue','LEFT');
+				$this->db->where('A.program_code',$sel_program);
+				$this->db->where('A.exam_center_code',$exam_center_code);
+				$this->db->where('A.exam_vanue_code',$exam_vanue);
+				$this->db->where('A.record_status','1');
+				$this->db->group_by('A.capacity');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'applicants_venue_admit_setup': 
+            	
+            	$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+            	$sel_exam_center = isset($_POST['applied_exam_center_code']) ? $_POST['applied_exam_center_code'] : '';
+            	$round_data = isset($_POST['round_data']) ? $_POST['round_data'] : '';
+			 	
+				$this->db->select("exam_vanue_code,exam_vanue");
+				$this->db->from('admitcard_setup');
+				$this->db->where('program_code',$sel_program);
+				$this->db->where('exam_center_code',$sel_exam_center);
+				$this->db->where('round',$round_data);
+				$this->db->where('record_status','1');
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_assign_applicants_centre_admit_setup': 
+            	$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+            	$dbstatus = '';
+            	
+            	$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+            	$sel_exam_center = isset($_POST['applied_exam_center_code']) ? $_POST['applied_exam_center_code'] : '';
+            	$application_date = isset($_POST['applied_date']) ? $_POST['applied_date'] : '';
+            	$assigned_exam_center = isset($_POST['examCenter']) ? $_POST['examCenter'] : '';
+            	$round_data = isset($_POST['round_data']) ? $_POST['round_data'] : '';
+	
+				$assigned_exam_vanue = isset($_POST['examVanue']) ? $_POST['examVanue'] : '';
+			 	$arr_sel_applicants = $_POST['chkApplicant'];
+			 	
+				$this->db->select("program_name, program_code");
+				$this->db->from('program_master');
+				$this->db->where('program_code',$sel_program);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$sel_program_code = $row['program_code'];
+					$sel_program_name = $row['program_name'];
+	            }
+	            
+	            $this->db->select("document_type_code");
+				$this->db->from('program_document_setup');
+				$this->db->where('program_code',$sel_program);
+       			$where = '(record_status = "Active" OR record_status="1")';
+       			$this->db->where($where);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$documentsReq = array();
+				foreach ($output_data as $row) 
+	            {
+	            	$documentsReq[] = $row;
+	            }
+	            foreach($documentsReq as $row)
+				{
+					if(in_array('SIG',$row))
+					{
+						$sigDoc = 1;
+						//echo $sigDoc;
+					}
+					if(in_array('PHO',$row))
+					{
+						$phoDoc = 1;
+						//echo $sigDoc;
+					}
+				}
+	            
+	            $this->db->select("exam_centre_code, exam_centre_name");
+				$this->db->from('exam_centre_master');
+				$this->db->where('program_code',$sel_program);
+				$this->db->where('exam_centre_code',$sel_exam_center);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$sel_exam_center_code = $row['exam_centre_code'];
+					$sel_exam_center_name = $row['exam_centre_name'];
+	            }
+	            
+	            $this->db->select("exam_centre_code, exam_centre_name");
+				$this->db->from('admitcard_exam_centre_master');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$allAdmitcardExamCenters[] = $row;
+	            }
+	            
+	            //get the latest OMR NO
+				$last_omr_no = 0;
+				
+				$this->db->select("MAX(omr_no) AS last_omr_no ");
+				$this->db->from('admitcard_published');
+				$this->db->where('applied_program',$sel_program);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$last_omr_no = $row['last_omr_no'];
+	            }
+	            
+	            if($last_omr_no == 0 ||$last_omr_no == '' )
+				{
+					$this->db->select("omr_no");
+					$this->db->from('program_master');
+					$this->db->where('program_code',$sel_program);
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $row) 
+		            {
+		            	$omr_no = $row['omr_no'];
+		            }
+				}
+				else
+					$omr_no = $last_omr_no+1;
+				
+				foreach($arr_sel_applicants as $appl_no)
+				{
+					$this->db->select("omr_no");
+					$this->db->from('admitcard_published');
+					$this->db->where('applied_program',$sel_program);
+					$this->db->where('appl_no',$appl_no);
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $row) 
+		            {
+		            	$omr_no = $row['omr_no'];
+		            }
+		            
+					$new_data = array(
+						'appl_no' 							=>$appl_no,
+						'applied_program' 					=>$sel_program,
+						'applied_exam_center' 				=>$sel_exam_center,
+						'assigned_exam_center' 				=>$assigned_exam_center,
+						'assigned_exam_vanue' 				=>$assigned_exam_vanue,
+						'omr_no' 							=>$omr_no,
+						'round_no'							=>$round_data,
+						'created_by' 						=>$logged_user,
+						'created_on' 						=>$date,
+						'record_status'						=>'0'
+					);
+								
+					$sql = $this->db->insert('admitcard_published', $new_data);
+					
+					/*if($round_data == 1)
+					{*/
+						$new_data1 = array(
+		                    'round_no'						=>$round_data,
+		                    'roll_no'						=>$omr_no,
+							'updated_by'					=>$logged_user,
+							'updated_on'					=>$date,
+							'record_status'					=>'1'
+		               	);   
+		               	$this->db->where('appl_no',$appl_no);
+						$this->db->where('program_code',$sel_program);
+						$this->db->where('round_no',$round_data);
+			            $new_data_insert = $this->db->update("admitcard_round_data",$new_data1); 	
+					/*}*/
+					/*else
+					{
+						$this->db->select("reg_user_id");
+						$this->db->from('applicant_appl_overview');
+						$this->db->where('applied_program',$sel_program);
+						$this->db->where('appl_no',$appl_no);
+						$result = $this->db->get();
+						//echo $this->db->last_query();
+						$output_data = $result->result_array();
+						$output = array("aaData" => array());
+						foreach ($output_data as $row) 
+			            {
+			            	$reg_user_id = $row['reg_user_id'];
+			            }
+						$new_data1 = array(
+		                    'reg_user_id'					=>$reg_user_id,
+		                    'appl_no'						=>$appl_no,
+		                    'program_code'					=>$sel_program,
+		                    'round_no'						=>$round_data,
+		                    'roll_no'						=>$omr_no,
+							'created_by'					=>$logged_user,
+							'created_on'					=>$date,
+							'record_status'					=>'1'
+		               	);   
+		               	
+			            $new_data_insert = $this->db->insert("admitcard_round_data",$new_data1); 	
+					}*/
+					
+		            
+					$dbstatus = 'SUCCESS';
+					$omr_no++;
+				}
+	           	$output = array('status'=>$dbstatus);
+	           	
+	           	return $output; 
+			break;
+			
+			
+			case 'applicants_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$phoDoc = 0;
+				$sigDoc = 0;
+        		/*$sel_program = $data['program_code'];
+        		$sel_exam_center = $data['exam_centre'];
+        		$application_date = $data['applied_date'];*/
+        		/*echo $sel_program;
+        		die();*/
+        		
+        		$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+				$sel_exam_center = isset($_POST['applied_exam_center_code']) ? $_POST['applied_exam_center_code'] : '';
+				$application_date = isset($_POST['applied_date']) ? $_POST['applied_date'] : '';
+				$round_data = isset($_POST['round_data']) ? $_POST['round_data'] : '';
+        		
+        		$html = '';
+        		$html .= '<table class="table table-bordered" id="tblApplicantDetails">
+								<thead>
+									<tr>
+										<th>
+											#
+											<input class="Allcheckbox" type="checkbox" id="chkSelectAll" name="chkSelectAll" onclick="allcheck(\'Allcheckbox\',\'checkbox1\')"/>
+										</th>
+										<th class="text-center">Name</th>
+										<th class="text-center">Mobile No</th>
+										<th class="text-center">Appl No</th>
+										<th class="text-center">Applied On</th>
+										<th class="text-center">Fee Paid Mode</th>
+										<th class="text-center">Amount</th>
+										<th class="text-center">Fee Paid On</th>
+										<th class="text-center">Receipt No</th>
+										<th class="text-center">Photo</th>
+										<th class="text-center">Signature</th>
+									</tr>
+								</thead>
+								<tbody id="applicantBody">';
+        		
+        		
+        		
+        		
+				$this->db->select("program_name, program_code");
+				$this->db->from('program_master');
+				$this->db->where('program_code',$sel_program);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$sel_program_code = $row['program_code'];
+					$sel_program_name = $row['program_name'];
+	            }
+	            
+	            $this->db->select("document_type_code");
+				$this->db->from('program_document_setup');
+				$this->db->where('program_code',$sel_program);
+       			$where = '(record_status = "Active" OR record_status="1")';
+       			$this->db->where($where);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$documentsReq = array();
+				foreach ($output_data as $row) 
+	            {
+	            	$documentsReq[] = $row;
+	            }
+	            foreach($documentsReq as $row)
+				{
+					if(in_array('SIG',$row))
+					{
+						$sigDoc = 1;
+						//echo $sigDoc;
+					}
+					if(in_array('PHO',$row))
+					{
+						$phoDoc = 1;
+						//echo $sigDoc;
+					}
+				}
+	            
+	            $this->db->select("exam_centre_code, exam_centre_name");
+				$this->db->from('exam_centre_master');
+				$this->db->where('program_code',$sel_program);
+				$this->db->where('exam_centre_code',$sel_exam_center);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$sel_exam_center_code = $row['exam_centre_code'];
+					$sel_exam_center_name = $row['exam_centre_name'];
+	            }
+	            
+	            $this->db->select("exam_centre_code, exam_centre_name");
+				$this->db->from('admitcard_exam_centre_master');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$allAdmitcardExamCenters[] = $row;
+	            }
+	            
+	            //get the latest OMR NO
+				$last_omr_no = 0;
+				
+				$this->db->select("MAX(omr_no) AS last_omr_no ");
+				$this->db->from('admitcard_published');
+				$this->db->where('applied_program',$sel_program);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$last_omr_no = $row['last_omr_no'];
+	            }
+				$date = $application_date." 23:59:59";
+	            $dt = date("Y-m-d H:i:s",strtotime($date));
+	            $allApplicants = array();
+	            if($sel_program != '' && $sel_exam_center != '' && $application_date != '')
+				{
+					//get set up details for selected program and exam center
+					if($round_data == '1')
+					{
+						$where = "(B.updated_on <= '$dt' OR B.created_on <= '$dt')";
+						$where1 = "B.appl_no NOT IN (SELECT appl_no FROM admitcard_published WHERE applied_program='$sel_program'
+							AND applied_exam_center = '$sel_exam_center' AND round_no = '$round_data')";
+						$this->db->select("A.full_name, B.appl_no, B.form_no, A.reg_user_id, B.updated_on, B.created_on, D.money_deposit_mode, 
+							amount, depositdate, money_receipt_no,E.document_path AS passport_path,F.document_path AS signature_path");
+						$this->db->from('applicant_master A');
+						$this->db->join('applicant_appl_overview B','A.applied_program = B.applied_program AND A.reg_user_id = B.reg_user_id','inner');
+						$this->db->join('applicant_form_fee_overview D','B.appl_no = D.appl_no ','inner');
+						$this->db->join('admitcard_round_data G','B.appl_no = G.appl_no ','inner');
+						$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='PHO') E",'B.appl_no = E.appl_no','inner');
+						$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='SIG') F",'B.appl_no = F.appl_no','inner');
+						$where = '(B.appl_status="Verified" or B.appl_status = "Fee Paid")';
+	       				$this->db->where($where);
+						//$this->db->where('B.appl_status','Verified');
+						$this->db->where('A.applied_program',$sel_program);
+						$this->db->where('G.round_no',$round_data);
+						$this->db->where($where);
+						$this->db->where($where1);
+						$this->db->order_by("B.updated_on", "asc");
+					}
+					else
+					{
+						$where = "(B.updated_on <= '$dt' OR B.created_on <= '$dt')";
+						$where1 = "B.appl_no NOT IN (SELECT appl_no FROM admitcard_published WHERE applied_program='$sel_program'
+							AND applied_exam_center = '$sel_exam_center' AND round_no = '$round_data')";
+						$this->db->select("A.full_name, B.appl_no, B.form_no, A.reg_user_id, B.updated_on, B.created_on, D.money_deposit_mode, 
+							amount, depositdate, money_receipt_no,E.document_path AS passport_path,F.document_path AS signature_path");
+						$this->db->from('applicant_master A');
+						$this->db->join('applicant_appl_overview B','A.applied_program = B.applied_program AND A.reg_user_id = B.reg_user_id','inner');
+						$this->db->join('applicant_form_fee_overview D','B.appl_no = D.appl_no ','inner');
+						$this->db->join('admitcard_round_data G','B.appl_no = G.appl_no ','inner');
+						$this->db->join('admitcard_published H','B.appl_no = H.appl_no ','LEFT');
+						$this->db->join('applicant_exam_result I','H.omr_no = I.applicant_id ','LEFT');
+						$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='PHO') E",'B.appl_no = E.appl_no','inner');
+						$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='SIG') F",'B.appl_no = F.appl_no','inner');
+						$where = '(B.appl_status="Verified" or B.appl_status = "Fee Paid")';
+	       				$this->db->where($where);
+						$this->db->where('A.applied_program',$sel_program);
+						$this->db->where('G.round_no',$round_data);
+						$this->db->where('I.field','Selected');
+						$this->db->where($where);
+						$this->db->where($where1);
+						$this->db->group_by("B.appl_no,E.document_path,F.document_path");
+						$this->db->order_by("B.updated_on", "asc");
+					}
+					
+					$result = $this->db->get();
+					/*echo $this->db->last_query();
+					DIE();*/
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $row) 
+		            {
+		                $allApplicants[] = $row;
+		            }
+		            $sl_no = 1;
+		            
+		            foreach($allApplicants as $row)
+					{
+						if($row['money_deposit_mode'] == 'ON THE COUNTER')
+							$appl_date = $row['created_on'];
+						else
+							$appl_date = $row['updated_on'];
+						$applNo = $row['appl_no'];
+						
+						$this->db->select("A.category");
+						$this->db->from('applicant_master A');
+						$this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id','inner');
+						$this->db->where('B.appl_no',$applNo);
+						$this->db->where('B.applied_program',$sel_program);
+						$result = $this->db->get();
+						//echo $this->db->last_query();
+						$output_data = $result->result_array();
+						$output = array("aaData" => array());
+						$category = '';
+						foreach ($output_data as $row1) 
+			            {
+			            	$category = $row1['category'];
+			            }
+						
+						$required_amount = '';
+						$this->db->select("amount");
+						$this->db->from('program_fee_setup');
+						$this->db->where('program_code',$sel_program);
+						$this->db->where('category_code',$category);
+						$result = $this->db->get();
+						//echo $this->db->last_query();
+						$output_data = $result->result_array();
+						$output = array("aaData" => array());
+						foreach ($output_data as $row2) 
+			            {
+			            	$required_amount = $row2['amount'];
+			            }
+						
+						
+						//$query3 = "SELECT COUNT(program_code) AS photo_count FROM  WHERE PROGR"
+						$datetime1 = date_create($appl_date);
+						$datetime2 = date_create($dt);
+						if($datetime1 <= $datetime2)
+						{
+							$row['signature_path'];
+							$photo = "";
+							$signature = "";
+							if($row['passport_path'] != '')
+					        {
+					          $arr = explode('/',$row['passport_path']);
+					          $pho = end($arr);
+					          $pho = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$sel_program_code."/".$row['appl_no']."/".$pho;
+					        }
+					  		if($row['signature_path'] != '')
+					        {
+					          $arr = explode('/',$row['signature_path']);
+					          $sign = end($arr);
+					          $sign = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$sel_program_code."/".$row['appl_no']."/".$sign;
+					        }
+					        //echo $pho;
+							if(file_exists($pho))
+								$photo = $row['passport_path'];
+							
+							if(file_exists($sign))
+								$signature = $row['signature_path'];
+							
+							$style = '';
+							if($row['money_deposit_mode'] == 'ONLINE' && $row['amount'] < "$required_amount")
+								$style = "style='background-color:rgb(255,120,120)'";
+							else if($row['money_deposit_mode'] == 'CHALLAN' && $row['amount'] < "$required_amount")
+								$style = "style='background-color:rgb(255,120,120)'";
+							else if($row['money_deposit_mode'] == 'ON THE COUNTER' && $row['amount'] < "$required_amount")
+								$style = "style='background-color:rgb(255,120,120)'";
+							if($row['money_deposit_mode'] == 'ONLINE' && $row['money_receipt_no'] == '')
+								$style = "style='background-color:rgb(255,120,120);'";
+							if($row['money_deposit_mode'] == 'CHALLAN' && $row['money_receipt_no'] == '')
+								$style = "style='background-color:rgb(255,120,120)'";
+							if($phoDoc == 1)
+							{
+								if($photo == '')
+									$style = "style='background-color:rgb(255,120,120)'";
+							}
+							if($sigDoc == 1)
+							{
+								if($signature == '')
+								$style = "style='background-color:rgb(255,120,120)'";
+							}
+							
+							$html .= '<tr'.$style.'>';
+									$s = ($style == '' ? ' checked ' : '');
+							$html .= '<td>'.$sl_no.'
+									<input type="checkbox" onclick="check()" class="checkbox1" id="chk'.$sl_no.'" name="chkApplicant[]"	value="'.$row['appl_no'].'" '.$s.'/>
+									<td>'.$row['full_name'].'</td>
+									<td>'.$row['reg_user_id'].'</td>
+									<td>'.$row['appl_no'].'</td>
+									<td>'.$appl_date.'</td>
+									<td>'.$row['money_deposit_mode'].'</td>
+									<td>'.$row['amount'].'</td>
+									<td>'.$row['depositdate'].'</td>
+									<td>'.$row['money_receipt_no'].'</td>
+									<td><img src='.$photo.' style="width:100px;height:120px"/></td>
+									<td><img src='.$signature.' style="width:100px;height:80px"/></td>
+									</tr>';
+							$sl_no++;
+						}
+					}
+					
+				}
+	            $html .= '</tbody>
+							</table>';
+	            return array('html' => $html);
+	           
+			break;
+			
+			case 'get_assign_published_applicants_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$message = '';
+        		$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+				$sel_exam_center = isset($_POST['assigned_exam_center_code']) ? $_POST['assigned_exam_center_code'] : '';
+				$sel_exam_vanue = isset($_POST['exam_vanue']) ? $_POST['exam_vanue'] : '';
+				$round_data = isset($_POST['round_data']) ? $_POST['round_data'] : '';
+				$arr_sel_applicants = $_POST['chkApplicant'];
+				
+				$this->db->select("DATE_FORMAT(admit_card_available_from,'%d-%m-%Y') AS admit_card_available_from , 
+				       DATE_FORMAT(admit_card_available_upto,'%d-%m-%Y') AS admit_card_available_upto");
+				$this->db->from('admitcard_setup');
+				$this->db->where('program_code',$sel_program);
+       			$this->db->where('exam_center_code',$sel_exam_center);
+       			$this->db->where('exam_vanue_code',$sel_exam_vanue);
+				$result = $this->db->get();
+				//echo $this->db->last_query();DIE();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$start_date = $row['admit_card_available_from'];
+					$end_date = $row['admit_card_available_upto'];
+	            }
+				
+        		$this->db->select("REPLACE (A.sms_url,'amp;','') AS sms_url,A.user_name,A.password,A.sender,B.content,D.program_name");
+				$this->db->from('sms_provider_setup A');
+				$this->db->join('sms_setup B','A.provider_name = B.provider_name','inner');
+				$this->db->join('program_sms_setup C','B.sms_type = C.sms_type','inner');
+				$this->db->join('program_master D','C.program_code = D.program_code','inner');
+				$this->db->where('C.record_status','1');
+				$this->db->where('B.sms_type','ADMIT CARD GENERATION');
+				$this->db->where('B.status','ACTIVE');
+				$this->db->where('B.record_status','1');
+				$this->db->where('C.program_code',$sel_program);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$messageToSend = '';
+				$new_sms_url = '';
+				$new_content = '';
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row1) 
+	            {
+	                $sms_url = $row1['sms_url'];
+					$user_name = $row1['user_name'];
+					$password = addslashes($row1['password']);
+					$sender = $row1['sender'];
+					$content = $row1['content'];
+					$program = $row1['program_name'];
+					$find = array("[username]", "[password]", "[sender]");
+					$replace = array($user_name, $password, $sender);
+					$new_sms_url = str_replace($find, $replace, $sms_url);//find and replace uid and pwd in url
+					$findappl = array("[program name]","[start date]","[end date]");
+					$replaceappl = array($program,$start_date,$end_date);
+					$new_content = str_replace($findappl, $replaceappl, $content);
+					$messageToSend = urlencode($new_content);
+	            }
+				
+				foreach($arr_sel_applicants as $appl_no)
+				{
+					$this->db->select("aao.reg_user_id AS user_id, email_id, full_name");
+					$this->db->from('applicant_appl_overview AS aao');
+					$this->db->join('applicant_reg_master AS arm', 'arm.reg_user_id = aao.reg_user_id', 'inner');
+					$this->db->join('applicant_master AS am', 'am.reg_user_id = aao.reg_user_id', 'inner');
+					$this->db->where('appl_no',$appl_no);
+					$this->db->where('aao.applied_program',$sel_program);
+					$result = $this->db->get();
+					//echo $this->db->last_query();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $row) 
+		            {
+		            	$contact_no  = $row['user_id'];
+		            	$email = $row['email_id'];
+		            	$name = $row['full_name'];
+		            }
+					$update_data = array(
+						'updated_by'					=>$logged_user,
+						'updated_on'					=>$date,
+						'record_status'						=>'1'
+					);
+					$this->db->where('appl_no',$appl_no);
+					$this->db->where('round_no',$round_data);
+					$this->db->where('applied_program',$sel_program);
+					$this->db->where('assigned_exam_center',$sel_exam_center);
+					$this->db->where('assigned_exam_vanue',$sel_exam_vanue);
+					$sql = $this->db->update('admitcard_published', $update_data);
+					
+		            //echo $this->db->last_query();die();
+					if(!$sql)
+					{
+						$dbStatus = FALSE;
+						$dbMessage = 'Error inserting admitcard_published';
+					}
+					
+					$message = 'success';
+					//find replace url with mobileno and message
+					$findmobileNo = array("[mobileno]","[message]");
+					$replacemobileNo = array($contact_no,$messageToSend);
+					$smsURL = str_replace($findmobileNo,$replacemobileNo,$new_sms_url);	
+					/*$ch = curl_init($smsURL );
+					curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+					$result = curl_exec($ch);
+					curl_close($ch);*/
+					
+					$this->db->select('host_name , port_no,email_id,password,smtp_auth,smtp_secure');
+					$this->db->from('email_provider_setup');
+					$this->db->where('record_status','1');
+					$this->db->limit('1');
+					$result = $this->db->get();
+					$query = $result->result_array();
+					
+					$row_count = $result->num_rows();
+					foreach($result->result_array() AS $row1)
+					{
+						$host_name = $row1['host_name'];
+						$port_no = $row1['port_no'];
+						$email_id = $row1['email_id'];
+						$password = $row1['password'];
+						$smtp_auth = $row1['smtp_auth'];
+						$smtp_secure = $row1['smtp_secure'];
+					}
+					
+					$this->db->select('es.email_type,es.subject,es.content');
+					$this->db->from('email_setup es');
+					$this->db->join('program_email_setup pes','es.email_type = pes.email_type','inner');
+					$this->db->where('es.email_type','ADMIT CARD');
+					$this->db->where('pes.institute_code','APPSC');
+					$this->db->limit('1');
+					$result = $this->db->get();
+					$query = $result->result_array();
+					
+					$row_count = $result->num_rows();
+					foreach($result->result_array() AS $row1)
+					{
+						$email_type=$row1['email_type'];
+						$subject=$row1['subject'];
+						$content=$row1['content'];
+					}
+					if($row_count > 0)
+					{
+						//echo 'hi';
+						if($email != '')
+						{
+							$this->load->library('email');
+							
+							$config['protocol']    = 'smtp';
+							$config['smtp_host']    = 'ssl://smtp.gmail.com';
+							$config['smtp_port']    = $port_no;
+							$config['smtp_timeout'] = '7';
+							$config['smtp_user']    = $email_id;
+							$config['smtp_pass']    = $password;
+							$config['charset']    = 'utf-8';
+							$config['newline']    = "\r\n";
+							$config['mailtype'] = 'html'; // or text
+							$config['validation'] = TRUE; // bool whether to validate email or not   
+							$this->email->initialize($config);
+							 
+
+							$email_content = str_replace("[name]",$name,$content);
+							//$email_content = str_replace($find, $replace, $content);//find and replace uid and pwd in url
+							$this->email->from($email_id, 'ADMIT PUBLISHED');
+							$this->email->to($email);
+							$this->email->subject($subject);
+							$this->email->message($email_content);
+							//$this->email->message($body);  
+
+							if($this->email->send()){
+							    $dbStatus = TRUE; 
+							    $dbMessage = 'A mail is forwarded to the registered mail id  ';
+						    }
+						    else{
+						    	/*print_r($this->email->print_debugger());
+								echo $this->email->print_debugger();die();*/
+							    $dbStatus = FALSE; 
+							    $dbMessage = 'Unable to sent Mail.Please Contact for Support';
+						    }
+						}
+					}
+				}
+				
+				$output = array('status'=>$message);
+	           	
+	           	return $output; 
+				
+			break;
+			
+			
+			
+			case 'published_applicants_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$phoDoc = 0;
+				$sigDoc = 0;
+        		$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+				$sel_exam_center = isset($_POST['assigned_exam_center_code']) ? $_POST['assigned_exam_center_code'] : '';
+				$sel_exam_vanue = isset($_POST['exam_vanue']) ? $_POST['exam_vanue'] : '';
+				$round_data = isset($_POST['round_data']) ? $_POST['round_data'] : '';
+        		
+        		$html = '';
+        		$html .= '<table class="table table-bordered" id="tblApplicantDetails">
+								<thead>
+									<tr>
+										<th>
+											#
+											<input class="Allcheckbox" type="checkbox" id="chkSelectAll" name="chkSelectAll" onclick="allcheck(\'Allcheckbox\',\'checkbox1\')"/>
+										</th>
+										<th class="text-center">Name</th>
+										<th>Appl No</th>
+										<th>Applied On</th>
+										<th>Fee Paid Mode</th>
+										<th>Amount</th>
+										<th>Fee Paid On</th>
+										<th>Receipt No</th>
+										<th>Applied</th>
+										<th>Assigned</th>
+										<th>OMR</th>
+										<th>Photo</th>
+										<th>Signature</th>
+									</tr>
+								</thead>
+								<tbody id="applicantBody">';
+								
+				$this->db->select("document_type_code");
+				$this->db->from('program_document_setup');
+				$this->db->where('program_code',$sel_program);
+       			$where = '(record_status = "Active" OR record_status="1")';
+       			$this->db->where($where);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$documentsReq = array();
+				foreach ($output_data as $row) 
+	            {
+	            	$documentsReq[] = $row;
+	            }
+	            foreach($documentsReq as $row)
+				{
+					if(in_array('SIG',$row))
+					{
+						$sigDoc = 1;
+						//echo $sigDoc;
+					}
+					if(in_array('PHO',$row))
+					{
+						$phoDoc = 1;
+						//echo $sigDoc;
+					}
+				}
+        		
+	            $allApplicants = array();
+	            if($sel_program != '' && $sel_exam_center != '')
+				{
+					//get set up details for selected program and exam center
+					
+					$this->db->select("A.full_name, B.appl_no, B.form_no, 
+										A.reg_user_id, B.updated_on, D.money_deposit_mode, amount, depositdate,
+										money_receipt_no, A.exam_center_code AS applied_exam_center,
+										E.assigned_exam_center AS assigned_exam_center, omr_no, E.record_status AS publish_status,
+										F.document_path AS passport_path,G.document_path AS signature_path");
+					$this->db->from('applicant_master A');
+					$this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id
+										AND A.applied_program = B.applied_program','inner');
+					$this->db->join('applicant_form_fee_overview D','B.appl_no = D.appl_no ','inner');
+					$this->db->join('admitcard_round_data H','B.appl_no = H.appl_no ','inner');
+					$this->db->join('admitcard_published E','B.appl_no = E.appl_no AND A.applied_program = E.applied_program','inner');
+					$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='PHO') F",'B.appl_no = F.appl_no','inner');
+					$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='SIG') G",'B.appl_no = G.appl_no','inner');
+					$where = '(B.appl_status="Verified" or B.appl_status = "Fee Paid")';
+       				$this->db->where($where);
+					$this->db->where('A.applied_program',$sel_program);
+					$this->db->where('E.assigned_exam_center',$sel_exam_center);
+					$this->db->where('E.assigned_exam_vanue',$sel_exam_vanue);
+					$this->db->where('H.round_no',$round_data);
+					$this->db->where('E.round_no',$round_data);
+					$this->db->group_by("B.appl_no,F.document_path,G.document_path");
+					$this->db->order_by("B.updated_on", "asc");
+					$result = $this->db->get();
+					/*echo $this->db->last_query();
+					die();*/
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $row) 
+		            {
+		                $allApplicants[] = $row;
+		            }
+		            $sl_no = 1;
+		            
+		            foreach($allApplicants as $row)
+					{
+						$photo = "";
+						$signature = "";
+						$applNo = $row['appl_no'];
+						
+						$this->db->select("A.category");
+						$this->db->from('applicant_master A');
+						$this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id','inner');
+						$this->db->where('B.appl_no',$applNo);
+						$this->db->where('B.applied_program',$sel_program);
+						$result = $this->db->get();
+						//echo $this->db->last_query();
+						$output_data = $result->result_array();
+						$output = array("aaData" => array());
+						$category = '';
+						foreach ($output_data as $row1) 
+			            {
+			            	$category = $row1['category'];
+			            }
+						
+						$required_amount = '';
+						$this->db->select("amount");
+						$this->db->from('program_fee_setup');
+						$this->db->where('program_code',$sel_program);
+						$this->db->where('category_code',$category);
+						$result = $this->db->get();
+						//echo $this->db->last_query();
+						$output_data = $result->result_array();
+						$output = array("aaData" => array());
+						foreach ($output_data as $row2) 
+			            {
+			            	$required_amount = $row2['amount'];
+			            }
+						
+						if($row['passport_path'] != '')
+				        {
+				          $arr = explode('/',$row['passport_path']);
+				          $pho = end($arr);
+				          $pho = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$sel_program."/".$row['appl_no']."/".$photo;
+				        }
+				  		if($row['signature_path'] != '')
+				        {
+				          $arr = explode('/',$row['signature_path']);
+				          $sign = end($arr);
+				          $sign = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$sel_program."/".$row['appl_no']."/".$sign;
+				        }
+						if(file_exists($pho))
+							$photo = $row['passport_path'];
+						
+						if(file_exists($sign))
+							$signature = $row['signature_path'];
+						
+						$style = '';
+						if($row['money_deposit_mode'] == 'ONLINE' && $row['amount'] < "$required_amount")
+							$style = "style='background-color:rgb(255,120,120)'";
+						else if($row['money_deposit_mode'] == 'CHALLAN' && $row['amount'] < "$required_amount")
+							$style = "style='background-color:rgb(255,120,120)'";
+						else if($row['money_deposit_mode'] == 'ON THE COUNTER' && $row['amount'] < "$required_amount")
+							$style = "style='background-color:rgb(255,120,120)'";
+						if($row['money_deposit_mode'] == 'ONLINE' && $row['money_receipt_no'] == '')
+							$style = "style='background-color:rgb(255,120,120);'";
+						if($row['money_deposit_mode'] == 'CHALLAN' && $row['money_receipt_no'] == '')
+							$style = "style='background-color:rgb(255,120,120)'";
+						if($phoDoc == 1)
+						{
+							if($photo == '')
+								$style = "style='background-color:rgb(255,120,120)'";
+						}
+						if($sigDoc == 1)
+						{
+							if($signature == '')
+							$style = "style='background-color:rgb(255,120,120)'";
+						}
+						
+						$html .= '<tr'.$style.'>';
+						if($row['publish_status'] == 1)
+						{
+							$url = base_url().'public/assets/images/correct.png';
+							$html .= "<td>$sl_no<img src='$url'/></td>";
+						}
+						else
+						{
+							$s = ($style == '' ? ' checked ' : '');
+							$html .= "<td>$sl_no<input type=\"checkbox\" onclick='check()' id=\"chk$sl_no\" name=\"chkApplicant[]\" value=\"".$row['appl_no']."\" class='checkbox1' $s/></td>";
+						}
+								$s = ($style == '' ? ' checked ' : '');
+						$html .='<td>'.$row['full_name'].'</td>
+								<td>'.$row['appl_no'].'</td>
+								<td>'.$row['updated_on'].'</td>
+								<td>'.$row['money_deposit_mode'].'</td>
+								<td>'.$row['amount'].'</td>
+								<td>'.$row['depositdate'].'</td>
+								<td>'.$row['money_receipt_no'].'</td>
+								<td>'.$row['applied_exam_center'].'</td>
+								<td>'.$row['assigned_exam_center'].'</td>
+								<td>'.$row['omr_no'].'</td>
+								<td><img src='.$photo.' style="width:100px;height:120px"/></td>
+								<td><img src='.$signature.' style="width:100px;height:80px"/></td>
+								</tr>';
+						$sl_no++;
+					}
+					
+				}
+	            $html .= '</tbody>
+							</table>';
+	            return array('html' => $html);
+	           
+			break;
+			
+			case 'published_applicants_exam_centre_name_admit_setup': 
+            	
+            	$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+				$sel_exam_center = isset($_POST['assigned_exam_center_code']) ? $_POST['assigned_exam_center_code'] : '';
+			 	
+				$this->db->select("exam_centre_code, exam_centre_name");
+				$this->db->from('exam_centre_master');
+				$this->db->where('program_code',$sel_program);
+				$this->db->where('exam_centre_code',$sel_exam_center);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$sel_exam_center_code = $row['exam_centre_code'];
+					$sel_exam_center_name = $row['exam_centre_name'];
+	            }
+				$output = array('exam_center_code'=>$sel_exam_center_code,'exam_center_name'=>$sel_exam_center_name);
+			
+				return $output; 
+			break;
+			
+			case 'published_applicants_exam_venue_name_admit_setup': 
+            	
+            	$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+				$sel_exam_center = isset($_POST['assigned_exam_center_code']) ? $_POST['assigned_exam_center_code'] : '';
+				$sel_exam_vanue = isset($_POST['exam_vanue']) ? $_POST['exam_vanue'] : '';
+			 	
+				$this->db->select("exam_vanue");
+				$this->db->from('admitcard_setup');
+				$this->db->where('program_code',$sel_program);
+				$this->db->where('exam_center_code',$sel_exam_center);
+				$this->db->where('exam_vanue_code',$sel_exam_vanue);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				foreach ($output_data as $row) 
+	            {
+	            	$sel_exam_center_name = $row['exam_vanue'];
+	            }
+				$output = array('exam_venue_name'=>$sel_exam_center_name);
+			
+				return $output; 
+			break;
+			
+			case 'published_applicants_report_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$sel_program = isset($_POST['program_code']) ? $_POST['program_code'] : '';
+				$sel_exam_center = isset($_POST['assigned_exam_center_code']) ? $_POST['assigned_exam_center_code'] : '';
+				$sel_exam_vanue = isset($_POST['exam_vanue']) ? $_POST['exam_vanue'] : '';
+				$round_data = isset($_POST['round_data']) ? $_POST['round_data'] : '';
+        		
+        		$html = '';
+        		$html .= '<table class="table table-bordered" id="tblApplicantDetails">
+								<thead>
+									<tr>
+										<th>
+											Sl No
+										</th>
+										<th>Name</th>
+										<th>Appl No</th>
+										<th>Applied On</th>
+										<th>Fee Paid Mode</th>
+										<th>Amount</th>
+										<th>Fee Paid On</th>
+										<th>Receipt No</th>
+										<th>Applied</th>
+										<th>Assigned</th>
+										<th>OMR</th>
+									</tr>
+								</thead>
+								<tbody id="applicantBody">';
+				$phoDoc = 0;
+				$sigDoc = 0;
+				$this->db->select("document_type_code");
+				$this->db->from('program_document_setup');
+				$this->db->where('program_code',$sel_program);
+       			$where = '(record_status = "Active" OR record_status="1")';
+       			$this->db->where($where);
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$documentsReq = array();
+				foreach ($output_data as $row) 
+	            {
+	            	$documentsReq[] = $row;
+	            }
+	            foreach($documentsReq as $row)
+				{
+					if(in_array('SIG',$row))
+					{
+						$sigDoc = 1;
+						//echo $sigDoc;
+					}
+					if(in_array('PHO',$row))
+					{
+						$phoDoc = 1;
+						//echo $sigDoc;
+					}
+				}
+        		
+	            $allApplicants = array();
+	            if($sel_program != '' && $sel_exam_center != '')
+				{
+					//get set up details for selected program and exam center
+					
+					$this->db->select("A.full_name, B.appl_no, B.form_no, 
+										A.reg_user_id, B.updated_on, D.money_deposit_mode, amount, depositdate,
+										F.document_path AS passport_path,G.document_path AS signature_path,
+										money_receipt_no, A.exam_center_code AS applied_exam_center,
+										E.assigned_exam_center AS assigned_exam_center, omr_no, E.record_status AS publish_status");
+					$this->db->from('applicant_master A');
+					$this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id
+										AND A.applied_program = B.applied_program','inner');
+					$this->db->join('applicant_form_fee_overview D','B.appl_no = D.appl_no ','inner');
+					$this->db->join('admitcard_round_data H','B.appl_no = H.appl_no ','inner');
+					$this->db->join('admitcard_published E','B.appl_no = E.appl_no AND A.applied_program = E.applied_program','inner');
+					$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='PHO') F",'B.appl_no = F.appl_no','inner');
+					$this->db->join("(SELECT document_path,appl_no FROM applicant_form_documents WHERE document_type='SIG') G",'B.appl_no = G.appl_no','inner');
+					$this->db->where('A.status','1');
+					$this->db->where('B.appl_status','Verified');
+					$this->db->where('A.applied_program',$sel_program);
+					$this->db->where('E.assigned_exam_center',$sel_exam_center);
+					$this->db->where('E.assigned_exam_vanue',$sel_exam_vanue);
+					$this->db->where('E.record_status',1);
+					$this->db->where('H.round_no',$round_data);
+					$this->db->where('E.round_no',$round_data);
+					$this->db->order_by("omr_no", "asc");
+					$result = $this->db->get();
+					echo $this->db->last_query();
+					die();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $row) 
+		            {
+		                $allApplicants[] = $row;
+		            }
+		            $sl_no = 1;
+		            //print_r($allApplicants);
+		            foreach($allApplicants as $row)
+					{
+						$photo = "";
+						$signature = "";
+						$applNo = $row['appl_no'];
+						
+						$this->db->select("A.category");
+						$this->db->from('applicant_master A');
+						$this->db->join('applicant_appl_overview B','A.reg_user_id = B.reg_user_id','inner');
+						$this->db->where('B.appl_no',$applNo);
+						$this->db->where('B.applied_program',$sel_program);
+						$result = $this->db->get();
+						//echo $this->db->last_query();
+						$output_data = $result->result_array();
+						$output = array("aaData" => array());
+						$category = '';
+						foreach ($output_data as $row1) 
+			            {
+			            	$category = $row1['category'];
+			            }
+						
+						$required_amount = '';
+						$this->db->select("amount");
+						$this->db->from('program_fee_setup');
+						$this->db->where('program_code',$sel_program);
+						$this->db->where('category_code',$category);
+						$result = $this->db->get();
+						//echo $this->db->last_query();
+						$output_data = $result->result_array();
+						$output = array("aaData" => array());
+						foreach ($output_data as $row2) 
+			            {
+			            	$required_amount = $row2['amount'];
+			            }
+						
+						if($row['passport_path'] != '')
+				        {
+				          $arr = explode('/',$row['passport_path']);
+				          $pho = end($arr);
+				          $pho = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$sel_program."/".$row['appl_no']."/".$photo;
+				        }
+				  		if($row['signature_path'] != '')
+				        {
+				          $arr = explode('/',$row['signature_path']);
+				          $sign = end($arr);
+				          $sign = DOCUMENT_UPLOAD_URL."/DOCUMENTS/".$sel_program."/".$row['appl_no']."/".$sign;
+				        }
+						if(file_exists($pho))
+							$photo = $row['passport_path'];
+						
+						if(file_exists($sign))
+							$signature = $row['signature_path'];
+						
+						$style = '';
+						if($row['money_deposit_mode'] == 'ONLINE' && $row['amount'] < "$required_amount")
+							$style = "style='background-color:rgb(255,120,120)'";
+						else if($row['money_deposit_mode'] == 'CHALLAN' && $row['amount'] < "$required_amount")
+							$style = "style='background-color:rgb(255,120,120)'";
+						else if($row['money_deposit_mode'] == 'ON THE COUNTER' && $row['amount'] < "$required_amount")
+							$style = "style='background-color:rgb(255,120,120)'";
+						if($row['money_deposit_mode'] == 'ONLINE' && $row['money_receipt_no'] == '')
+							$style = "style='background-color:rgb(255,120,120)'";
+						if($row['money_deposit_mode'] == 'CHALLAN' && $row['money_receipt_no'] == '')
+							$style = "style='background-color:rgb(255,120,120)'";
+						if($phoDoc == 1)
+						{
+							if($photo == '')
+								$style = "style='background-color:rgb(255,120,120)'";
+						}
+						if($sigDoc == 1)
+						{
+							if($signature == '')
+							$style = "style='background-color:rgb(255,120,120)'";
+						}
+						
+						$html .= '<tr'.$style.'>';
+						$html .='<td>'.$sl_no.'</td>
+								<td>'.$row['full_name'].'</td>
+								<td>'.$row['appl_no'].'</td>
+								<td>'.$row['updated_on'].'</td>
+								<td>'.$row['money_deposit_mode'].'</td>
+								<td>'.$row['amount'].'</td>
+								<td>'.$row['depositdate'].'</td>
+								<td>'.$row['money_receipt_no'].'</td>
+								<td>'.$row['applied_exam_center'].'</td>
+								<td>'.$row['assigned_exam_center'].'</td>
+								<td>'.$row['omr_no'].'</td>
+								</tr>';
+						$sl_no++;
+					}
+					
+				}
+	            $html .= '</tbody>
+							</table>';
+	            return array('html' => $html);
+	           
+			break;
+			
+			case 'centre_address_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				$program_code = $_POST['program_code'];
+				$exam_centre_code = $_POST['exam_centre_code'];
+				
+				if($exam_centre_code == '')
+				{
+					$this->db->select("A.program_code,A.exam_center_code,A.round,A.exam_vanue,A.capacity,
+										A.exam_center_address,A.exam_schedule,
+										DATE_FORMAT(A.admit_card_available_from,'%d-%m-%Y') AS admit_card_available_from,
+										DATE_FORMAT(A.admit_card_available_upto,'%d-%m-%Y') AS admit_card_available_upto,
+										A.exam_instructions,A.controller_name, A.controller_mobile_no, A.controller_email, A.controller_signature,
+										CASE WHEN A.record_status = '1' THEN '1' ELSE '0' END AS record_status,
+										C.exam_centre_name,template_code");
+					$this->db->from('admitcard_setup A');
+					$this->db->join('exam_centre_master C','A.exam_center_code = C.exam_centre_code AND A.program_code = C.program_code','left');
+					$this->db->where('A.program_code',$program_code);
+				}
+				else
+				{
+					$this->db->select("A.program_code,A.exam_center_code,A.round,A.exam_vanue,A.capacity,A.exam_center_address,A.exam_schedule,DATE_FORMAT(A.admit_card_available_from,'%d-%m-%Y') AS admit_card_available_from,DATE_FORMAT(A.admit_card_available_upto,'%d-%m-%Y') AS admit_card_available_upto,A.exam_instructions,A.controller_signature,CASE WHEN A.record_status = '1' THEN 'ACTIVE' ELSE 'INACTIVE' END AS record_status ,C.exam_centre_name,template_code");
+					$this->db->from('admitcard_setup A');
+					$this->db->join('exam_centre_master C','A.exam_center_code = C.exam_centre_code AND A.program_code = C.program_code','left');
+					$this->db->where('A.program_code',$program_code);
+					$this->db->where('A.exam_center_code',$exam_centre_code);
+				}
+				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'apply_date_admit_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+				$program_code = $_POST['program_code'];
+				
+				$this->db->select("date(apply_end_date) as apply_end_date ");
+				$this->db->from('program_master');
+				$this->db->where('program_code',$program_code);
+				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'chkDuplicate_admit_setup' :
+				$dbstatus = '';
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		
+        		$output = array("aaData" => array());
+        		if($_POST['validatevanuecode'])
+				{
+					$program_code = $_POST['program_code'];
+					$exam_center = $_POST['exam_centre'];
+					$txtExamVanueCode = $_POST['txtExamVanueCode'];
+					
+					$this->db->select("count(exam_vanue_code) AS exam_vanue_code");
+					$this->db->from('admitcard_setup');
+					$this->db->where('program_code',$program_code);
+					$this->db->where('exam_center_code',$exam_center);
+					$this->db->where('exam_vanue_code',$txtExamVanueCode);
+					$this->db->where('record_status','1');
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					foreach ($output_data as $aRow) 
+	            	{
+	            		$output['aaData'][] = $aRow['exam_vanue_code'];
+	            		$dbstatus = $aRow['exam_vanue_code'];
+	            	}
+				}
+				$output = array("status"=>$dbstatus);
+				return $output;
+			break;
+			case 'location_admit_setup': 
+            	
+            	$this->db->select("centre_code, centre_name");
+				$this->db->from('common_centre_master');				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'add_centre': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Inserted Successfully";
+            	
+			 	$hidProgramCode = $_POST['hidProgramCode'];
+				$hidExamCentreCode = $_POST['cmbExamCentreAdd'];
+				$cmbStatus = $_POST['cmbStatus'];
+				$txtCapacity = $_POST['txtCapacity'];
+				$txtExamRound = $_POST['cmbRound'];
+				$txtExamVanue = $_POST['txtExamVanue'];
+				$txtExamVanueCode = $_POST['txtExamVanueCode'];
+				$txtCentreAddress = $_POST['txtCentreAddress'];
+				$txtAvailableFrom = $_POST['txtAvailableFrom'];
+				$txtAvailableUpto = $_POST['txtAvailableUpto'];
+				$template_code = $_POST['cmbTemplate'];
+				$txtExamInstructions = trim($_POST['txtExamInstructions']);
+				$taExamSchedule = trim($_POST['taExamSchedule']);
+				$txtControllerName = $_POST['txtControllerName'];
+				$txtControllerMobileNo = $_POST['txtControllerMobileNo'];
+				$txtControllerEmail = $_POST['txtControllerEmail'];
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+			 	$op_type = 'add_centre';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				if(isset($_FILES['fileControllerSignature']['tmp_name']) && !empty($_FILES['fileControllerSignature']['tmp_name']))
+				{
+					
+					//$imageFileType = end((explode(".", $_FILES['fileControllerSignature']['name'])));
+					$filename = $_FILES['fileControllerSignature']['name'];
+					$tmp = explode('.', $filename);
+					$imageFileType = end($tmp);
+				
+					$check = getimagesize($_FILES["fileControllerSignature"]["tmp_name"]);
+					if($check !== false) {
+
+					} 
+					else 
+					{
+						return array('status'=>false, 'msg'=>"Not an Image");
+					}
+					// Check file size
+					if($_FILES["fileControllerSignature"]["size"] > 1536000) {
+						return array('status'=>false, 'msg'=>"Size of the image should be within 1MB");
+					}
+					// Allow certain file formats
+					if($imageFileType != "jpg" && $imageFileType != "png" && $imageFileType != "jpeg" && $imageFileType != "JPG" && $imageFileType != "PNG" && $imageFileType != "JPEG" ) {
+						return array('status'=>false, 'msg'=>"Supported file types are jpg/png/jpeg/gif");
+					}
+					if(isset($_FILES['fileControllerSignature']['tmp_name']) && !empty($_FILES['fileControllerSignature']['tmp_name'])){
+					//$image_name = base64_encode(file_get_contents($_FILES['fileControllerSignature']['tmp_name']));
+					//$pic_name = $this->session->userdata('user_id')."1".time().".png";//$_FILES['fileControllerSignature']['name'];
+					$pic_name = $this->input->post('institutecode').md5(uniqid($user)).".".$imageFileType;//$_FILES['fileControllerSignature']['name'];
+					$uploads_dir = FCPATH."public/assets/images/logo/".$pic_name;
+					//echo $uploads_dir. base_url('public');
+					move_uploaded_file($_FILES['fileControllerSignature']['tmp_name'], $uploads_dir);
+					//echo "PHoto upload status".$result.dirname(__FILE__) ;
+					//echo FCPATH."#".APPPATH."##".BASEPATH;
+					//die();
+					}
+					$this->db->select("count(program_code) AS program_code");
+					$this->db->from('admitcard_setup');
+					$this->db->where('program_code',$hidProgramCode);
+					$this->db->where('exam_center_code',$hidExamCentreCode );
+					$this->db->where('exam_vanue_code',$txtExamVanueCode );
+					$this->db->where('round',$txtExamRound );
+							
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'template_code'					=>$template_code,
+								'capacity' 						=>$txtCapacity,
+								'exam_center_address' 			=>$txtCentreAddress,
+								'exam_instructions'				=>$txtExamInstructions,
+								'exam_schedule' 				=>$taExamSchedule,
+								'controller_name'				=>$txtControllerName,
+								'controller_mobile_no'			=>$txtControllerMobileNo,
+								'controller_email'				=>$txtControllerEmail,
+								'controller_signature'			=>$pic_name,
+								'updated_by'					=>$user,
+								'updated_on'					=>$date,
+								'exam_vanue_code' 				=>$txtExamVanueCode,
+								'exam_vanue' 					=>$txtExamVanue,
+								'admit_card_available_from' 	=>date('Y-m-d', strtotime($txtAvailableFrom)),
+								'admit_card_available_upto' 	=>date('Y-m-d', strtotime($txtAvailableUpto))
+							);
+							$this->db->where('program_code',$hidProgramCode );
+							$this->db->where('exam_center_code',$hidExamCentreCode );
+							$this->db->where('exam_vanue_code',$txtExamVanueCode );
+							$this->db->where('round',$txtExamRound );
+							$sql = $this->db->update('admitcard_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "FALSE";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$hidProgramCode,
+								'round' 						=>$txtExamRound,
+								'exam_center_code' 				=>$hidExamCentreCode,
+								'exam_vanue_code' 				=>$txtExamVanueCode,
+								'exam_vanue' 					=>$txtExamVanue,
+								'controller_name'				=>$txtControllerName,
+								'controller_mobile_no'			=>$txtControllerMobileNo,
+								'controller_email'				=>$txtControllerEmail,
+								'template_code'					=>$template_code,
+								'capacity' 						=>$txtCapacity,
+								'exam_center_address' 			=>$txtCentreAddress,
+								'exam_schedule' 				=>$taExamSchedule,
+								'admit_card_available_from' 	=>date('Y-m-d', strtotime($txtAvailableFrom)),
+								'admit_card_available_upto' 	=>date('Y-m-d', strtotime($txtAvailableUpto)),
+								'exam_instructions' 			=>$txtExamInstructions,
+								'controller_signature' 			=>$pic_name,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('admitcard_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "FALSE";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	            }
+	            else
+				{
+					$this->db->select("program_code");
+					$this->db->from('admitcard_setup');
+					$this->db->where('program_code',$hidProgramCode);
+					$this->db->where('round',$txtExamRound);
+					$this->db->where('exam_center_code',$hidExamCentreCode);
+					$this->db->where('exam_vanue_code',$txtExamVanueCode);
+					
+					$result = $this->db->get();//echo $this->db->last_query();
+					//$output_data = $result->result_array();
+					
+					/*foreach ($output_data as $aRow1) 
+            		{*/
+            			$result_count = $result->num_rows();
+						if($result_count >= 1)
+						{
+							$update_data = array(
+								'template_code'					=>$template_code,
+								'capacity' 						=>$txtCapacity,
+								'exam_center_address' 			=>$txtCentreAddress,
+								'exam_instructions'				=>$txtExamInstructions,
+								'controller_name'				=>$txtControllerName,
+								'controller_mobile_no'			=>$txtControllerMobileNo,
+								'controller_email'				=>$txtControllerEmail,
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);//print_r($update_data);die();
+							$this->db->where('program_code',$hidProgramCode );
+							$this->db->where('exam_center_code',$hidExamCentreCode );
+							$this->db->where('exam_vanue_code',$txtExamVanueCode );
+							$this->db->where('round',$txtExamRound );
+							$sql = $this->db->update('admitcard_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "FALSE";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$hidProgramCode,
+								'round'		 					=>$txtExamRound,
+								'exam_center_code' 				=>$hidExamCentreCode,
+								'exam_vanue_code' 				=>$txtExamVanueCode,
+								'exam_vanue' 					=>$txtExamVanue,
+								'template_code'					=>$template_code,
+								'capacity' 						=>$txtCapacity,
+								'exam_center_address' 			=>$txtCentreAddress,
+								'controller_name'				=>$txtControllerName,
+								'controller_mobile_no'			=>$txtControllerMobileNo,
+								'controller_email'				=>$txtControllerEmail,
+								'exam_schedule' 				=>$taExamSchedule,
+								'admit_card_available_from' 	=>date('Y-m-d', strtotime($txtAvailableFrom)),
+								'admit_card_available_upto' 	=>date('Y-m-d', strtotime($txtAvailableUpto)),
+								'exam_instructions' 			=>$txtExamInstructions,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							//print_r($new_data);die();
+							$sql = $this->db->insert('admitcard_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "FALSE";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                /*}*/
+				}
+				
+				
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;	
+			break;
+			
+			case 'edit_centre': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+            	
+			 	$hidUniqueidEdit = $_POST['hidUniqueidEdit'];
+				$hidProgramCodeEdit = $_POST['hidProgramCodeEdit'];
+				$hidExamCentreCodeEdit = $_POST['hidExamCentreCodeEdit'];
+				//$challan_code = $cmbProgramCode.$txtBankCode;
+				//$txtExamCentreName = $_GET['txtExamCentreName'];
+				$template_code = $_POST['cmbTemplateEdit'];
+				$cmbStatusEdit = $_POST['cmbStatusEdit'];
+				$txtCapacityEdit = $_POST['txtCapacityEdit'];
+				$txtExamVanueEdit = $_POST['txtExamVanueEdit'];
+				$txtCentreAddressEdit = $_POST['txtCentreAddressEdit'];
+				$txtAvailableFromEdit = $_POST['txtAvailableFromEdit'];
+				$txtAvailableUptoEdit = $_POST['txtAvailableUptoEdit'];
+				$txtExamInstructionsEdit = trim($_POST['txtExamInstructionsEdit']);
+				$taExamScheduleEdit = trim($_POST['taExamScheduleEdit']);
+				$txtControllerName = $_POST['txtControllerNameEdit'];
+				$txtControllerMobileNo = $_POST['txtControllerMobileNoEdit'];
+				$txtControllerEmail = $_POST['txtControllerEmailEdit'];
+				$txtExamRound = $_POST['txtExamRoundEdit'];
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+			 	$op_type = 'edit_centre';
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+				
+				if(isset($_FILES['fileControllerSignatureEdit']['tmp_name']) && !empty($_FILES['fileControllerSignatureEdit']['tmp_name']))
+				{
+					$imageFileType = end((explode(".", $_FILES['fileControllerSignatureEdit']['name'])));
+					$check = getimagesize($_FILES["fileControllerSignatureEdit"]["tmp_name"]);
+					if($check !== false) {
+
+					} 
+					else 
+					{
+						return array('status'=>false, 'msg'=>"Not an Image");
+					}
+					// Check file size
+					if($_FILES["fileControllerSignatureEdit"]["size"] > 1536000) {
+						return array('status'=>false, 'msg'=>"Size of the image should be within 1MB");
+					}
+					// Allow certain file formats
+					if($imageFileType != "jpg" && $imageFileType != "png" && $imageFileType != "jpeg"  && $imageFileType != "JPG" && $imageFileType != "PNG" && $imageFileType != "JPEG" ) {
+						return array('status'=>false, 'msg'=>"Supported file types are jpg/png/jpeg/gif");
+					}
+					if(isset($_FILES['fileControllerSignatureEdit']['tmp_name']) && !empty($_FILES['fileControllerSignatureEdit']['tmp_name'])){
+					//$image_name = base64_encode(file_get_contents($_FILES['fileControllerSignature']['tmp_name']));
+					//$pic_name = $this->session->userdata('user_id')."1".time().".png";//$_FILES['fileControllerSignature']['name'];
+					$pic_name = $this->input->post('institutecode').md5(uniqid($user)).".".$imageFileType;//$_FILES['fileControllerSignature']['name'];
+					$uploads_dir = APPPATH."../public/assets/images/logo/".$pic_name;
+					//echo $uploads_dir. base_url('public');
+					move_uploaded_file($_FILES['fileControllerSignatureEdit']['tmp_name'], $uploads_dir);
+					//echo "PHoto upload status".$result.dirname(__FILE__) ;
+					//echo FCPATH."#".APPPATH."##".BASEPATH;
+					//die();
+					}
+				
+				
+					$update_data = array(
+						'exam_vanue' 					=>$txtExamVanueEdit,
+						'template_code'					=>$template_code,
+						'capacity' 						=>$txtCapacityEdit,
+						'exam_center_address' 			=>$txtCentreAddressEdit,
+						'exam_schedule'					=>$taExamScheduleEdit,
+						'controller_name'				=>$txtControllerName,
+						'controller_mobile_no'			=>$txtControllerMobileNo,
+						'controller_email'				=>$txtControllerEmail,
+						'admit_card_available_from' 	=>date('Y-m-d', strtotime($txtAvailableFromEdit)),
+						'admit_card_available_upto' 	=>date('Y-m-d', strtotime($txtAvailableUptoEdit)),
+						'controller_signature'			=>$pic_name,
+						'exam_instructions'				=>$txtExamInstructionsEdit,
+						'updated_by'					=>$user,
+						'updated_on'					=>$date,
+						'record_status'					=>$cmbStatusEdit
+						
+					);
+					$this->db->where('exam_vanue',$hidUniqueidEdit);
+					$this->db->where('program_code',$hidProgramCodeEdit);
+					$this->db->where('exam_center_code',$hidExamCentreCodeEdit);
+					$this->db->where('round',$txtExamRound );
+					$sql = $this->db->update('admitcard_setup', $update_data);
+					//echo $this->db->last_query();
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						//$dbError = ;	
+					}
+				}
+				else
+				{
+					$update_data = array(
+						'exam_vanue' 					=>$txtExamVanueEdit,
+						'template_code'					=>$template_code,
+						'capacity' 						=>$txtCapacityEdit,
+						'exam_center_address' 			=>$txtCentreAddressEdit,
+						'exam_schedule'					=>$taExamScheduleEdit,
+						'controller_name'				=>$txtControllerName,
+						'controller_mobile_no'			=>$txtControllerMobileNo,
+						'controller_email'				=>$txtControllerEmail,
+						'admit_card_available_from' 	=>date('Y-m-d', strtotime($txtAvailableFromEdit)),
+						'admit_card_available_upto' 	=>date('Y-m-d', strtotime($txtAvailableUptoEdit)),
+						'exam_instructions'				=>$txtExamInstructionsEdit,
+						'updated_by'					=>$user,
+						'updated_on'					=>$date,
+						'record_status'					=>$cmbStatusEdit
+						
+					);
+					$this->db->where('exam_vanue',$hidUniqueidEdit);
+					$this->db->where('program_code',$hidProgramCodeEdit);
+					$this->db->where('exam_center_code',$hidExamCentreCodeEdit);
+					$this->db->where('round',$txtExamRound );
+					$sql = $this->db->update('admitcard_setup', $update_data);
+					//echo $this->db->last_query();die();
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						//$dbError = ;	
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;	
+			break;
+			
+			case 'get_document_multiple':
+				//$institute = $_POST['institute'];
+				$this->db->select("document_type_code,document_type,document_type_code as document");
+				$this->db->from('document_type_master');
+				$this->db->where('record_status','1');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_assign_document_multiple':
+				//$institute = $_POST['institute'];
+				$this->db->select("document_type_code,document_type,document_type_code as document");
+				$this->db->from('selected_document_type_master');
+				$this->db->where('record_status','1');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'get_document_one':
+				//$institute = $_POST['institute'];
+				$program = $_POST['program'];
+				$this->db->select("A.document_type_code,A.document_type,CASE WHEN B.sl_no IS NULL THEN '0' ELSE B.sl_no END AS sl_no,CASE WHEN B.record_status IS NULL THEN '0' WHEN B.record_status = '1'THEN 1 ELSE 0 END AS record_status");
+				$this->db->from('document_type_master A');
+				$this->db->join('program_document_setup B','A.document_type_code = B.document_type_code','left');
+				$this->db->where('B.program_code',$program);
+				$this->db->order_by('A.id');
+				$result = $this->db->get();
+				$this->db->save_queries = TRUE;
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'get_sdocument_one':
+				//$institute = $_POST['institute'];
+				$program = $_POST['program'];
+				$this->db->select("A.document_type_code,A.document_type,CASE WHEN B.sl_no IS NULL THEN '0' ELSE B.sl_no END AS sl_no,CASE WHEN B.record_status IS NULL THEN '0' WHEN B.record_status = '1'THEN 1 ELSE 0 END AS record_status");
+				$this->db->from('selected_document_type_master A');
+				$this->db->join('selected_program_document_setup B','A.document_type_code = B.document_type_code','left');
+				$this->db->where('B.program_code',$program);
+				$this->db->order_by('A.id');
+				$result = $this->db->get();
+				$this->db->save_queries = TRUE;
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'assign_multiple_document' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+        		$arr_program_code = array();
+				$arr_menu_code = array();
+				$arr_sl_no = array();
+				$arr_show_status = array();
+				$program_codes = $_POST['program_codes'];
+				$menu_codes = $_POST['document_codes']?$_POST['document_codes']:'';
+				$sl_nos = $_POST['sl_nos']?$_POST['sl_nos']:'';
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					for($j=0;$j<sizeof($menu_codes);$j++)
+					{
+						$count = 0;
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							$this->db->select("count(program_code) AS program_code");
+							$this->db->from('program_document_setup');
+							$this->db->where('program_code',$arr_program_code[$i]);
+							$this->db->where('document_type_code',$menu_codes[$j]);
+							
+							$result = $this->db->get();
+							//echo $this->db->last_query();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+		            		{
+		            			$result = $aRow['program_code'];
+								if($result >= 1){
+									$update_data = array(
+										'sl_no'							=>$sl_nos[$j],
+										'record_status' 				=>$show_status[$j],
+										'updated_by'					=>$user,
+										'updated_on'					=>$date,
+										'institute_code'				=>$institute_code
+									);
+									$this->db->where('program_code',$arr_program_code[$i] );
+									$this->db->where('document_type_code',$menu_codes[$j]);
+									$sql = $this->db->update('program_document_setup', $update_data);
+									//echo $this->db->last_query();
+									if(!$sql){
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = ;	
+									}
+									
+								}
+								else{
+									$new_data = array(
+										'program_code' 					=>$arr_program_code[$i],
+										'document_type_code' 			=>$menu_codes[$j],
+										'sl_no' 						=>$sl_nos[$j],
+										'record_status' 				=>$show_status[$j],
+										'created_by'					=>$user,
+										'created_on'					=>$date,
+										'institute_code'				=>$institute_code
+									);
+									$sql = $this->db->insert('program_document_setup', $new_data);
+									//echo $this->db->last_query();
+									if(!$sql){
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = ;	
+									}
+								}
+							}
+						}
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			
+			case 'assign_single_document' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+        		$arr_document_code = array();
+				$program_code = $_POST['program_code'];
+				$sl_nos = $_POST['sl_nos']?$_POST['sl_nos']:'';
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				
+				$this->db->select("document_type_code");
+				$this->db->from('document_type_master');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$i = 0;
+				$output_data = $result->result_array();
+				foreach ($output_data as $row) 
+	            {
+	            	$document_type_code = $row['document_type_code'];
+	            	$this->db->select("count(program_code) AS program_code");
+					$this->db->from('program_document_setup');
+					$this->db->where('program_code',$program_code);
+					$this->db->where('document_type_code',$document_type_code);
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'sl_no' 						=>$sl_nos[$i],
+								'record_status' 				=>$show_status[$i],
+								'institute_code' 				=>$institute_code,
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);
+							$this->db->where('program_code',$program_code );
+							$this->db->where('document_type_code',$document_type_code );
+							$sql = $this->db->update('program_document_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$program_code,
+								'document_type_code' 			=>$document_type_code,
+								'sl_no' 						=>$sl_nos[$i],
+								'record_status' 				=>$show_status[$i],
+								'institute_code' 				=>$institute_code,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('program_document_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	                $i++;
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			case 'select_assign_document_one' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Assigned Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+        		$arr_program_code = array();
+				$arr_menu_code = array();
+				$arr_sl_no = array();
+				$arr_show_status = array();
+				$program_codes = $_POST['program_codes'];
+				$menu_codes = $_POST['document_codes']?$_POST['document_codes']:'';
+				$sl_nos = $_POST['sl_nos']?$_POST['sl_nos']:'';
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				
+				
+				for($i=0;$i<sizeof($arr_program_code);$i++)
+				{
+					for($j=0;$j<sizeof($menu_codes);$j++)
+					{
+						$count = 0;
+						if($arr_program_code[$i] != "multiselect-all")
+						{
+							$this->db->select("count(program_code) AS program_code");
+							$this->db->from('selected_program_document_setup');
+							$this->db->where('program_code',$arr_program_code[$i]);
+							$this->db->where('document_type_code',$menu_codes[$j]);
+							
+							$result = $this->db->get();
+							//echo $this->db->last_query();
+							$output_data = $result->result_array();
+							foreach ($output_data as $aRow) 
+		            		{
+		            			$result = $aRow['program_code'];
+								if($result >= 1){
+									$update_data = array(
+										'sl_no'							=>$sl_nos[$j],
+										'record_status' 				=>$show_status[$j],
+										'updated_by'					=>$user,
+										'updated_on'					=>$date,
+										'institute_code'				=>$institute_code
+									);
+									$this->db->where('program_code',$arr_program_code[$i] );
+									$this->db->where('document_type_code',$menu_codes[$j]);
+									$sql = $this->db->update('selected_program_document_setup', $update_data);
+									//echo $this->db->last_query();
+									if(!$sql){
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = ;	
+									}
+									
+								}
+								else{
+									$new_data = array(
+										'program_code' 					=>$arr_program_code[$i],
+										'document_type_code' 			=>$menu_codes[$j],
+										'sl_no' 						=>$sl_nos[$j],
+										'record_status' 				=>$show_status[$j],
+										'created_by'					=>$user,
+										'created_on'					=>$date,
+										'institute_code'				=>$institute_code
+									);
+									$sql = $this->db->insert('selected_program_document_setup', $new_data);
+									//echo $this->db->last_query();
+									if(!$sql){
+										$dbStatus = "ERROR";
+										$dbMessage = "Error Inserting";
+										//$dbError = ;	
+									}
+								}
+							}
+						}
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			case 'assign_single_sdocument' :
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+				$dbError = "";
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		
+        		$arr_document_code = array();
+				$program_code = $_POST['program_code'];
+				$sl_nos = $_POST['sl_nos']?$_POST['sl_nos']:'';
+				$show_status = $_POST['show_status']?$_POST['show_status']:'';
+				
+				$this->db->select("document_type_code");
+				$this->db->from('selected_document_type_master');
+				$this->db->order_by('id');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$i = 0;
+				$output_data = $result->result_array();
+				foreach ($output_data as $row) 
+	            {
+	            	$document_type_code = $row['document_type_code'];
+	            	$this->db->select("count(program_code) AS program_code");
+					$this->db->from('selected_program_document_setup');
+					$this->db->where('program_code',$program_code);
+					$this->db->where('document_type_code',$document_type_code);
+					
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					
+					foreach ($output_data as $aRow1) 
+            		{
+            			$result = $aRow1['program_code'];
+						if($result >= 1)
+						{
+							$update_data = array(
+								'sl_no' 						=>$sl_nos[$i],
+								'record_status' 				=>$show_status[$i],
+								'institute_code' 				=>$institute_code,
+								'updated_by'					=>$user,
+								'updated_on'					=>$date
+							);
+							$this->db->where('program_code',$program_code );
+							$this->db->where('document_type_code',$document_type_code );
+							$sql = $this->db->update('selected_program_document_setup', $update_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+						else
+						{
+							$new_data = array(
+								'program_code' 					=>$program_code,
+								'document_type_code' 			=>$document_type_code,
+								'sl_no' 						=>$sl_nos[$i],
+								'record_status' 				=>$show_status[$i],
+								'institute_code' 				=>$institute_code,
+								'created_by'					=>$user,
+								'created_on'					=>$date
+							);
+							
+							
+							$sql = $this->db->insert('selected_program_document_setup', $new_data);
+							//echo $this->db->last_query();
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+								//$dbError = ;	
+							}
+						}
+	                }
+	                $i++;
+	            }
+	            if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				}
+				return $output;
+			break;
+			case 'send_email':
+				//$institute = $_POST['institute'];
+				
+				$this->db->select("email_id,full_name,program_name,counselling_venue,A.reg_user_id,A.applied_program");
+				$this->db->from('applicant_rank_master A');
+				$this->db->join('program_master B','A.applied_program = B.program_code','INNER');
+				$this->db->join('applicant_reg_master C','A.applied_program = C.applied_program and A.reg_user_id = C.reg_user_id','INNER');
+				$this->db->where('A.record_status',1);
+				$this->db->where('A.mail_status',0);
+				$result = $this->db->get();
+				$this->db->save_queries = TRUE;
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $this->load->library('email');
+				    $this->email->set_newline("\r\n");
+				    $this->email->set_mailtype("html");
+				     //set email information and content
+				    $this->email->from('cipet@gmail.com',  'CIPET JEE-2018');
+				    $this->email->to($aRow['email_id']); 
+				    $this->email->subject('Hello');
+				    $this->email->message('Dear '.$aRow['full_name']);//print_r($this->email->send());die();
+				    if($this->email->send()){
+					    $data = array('mail_status'=>1);
+					    $this->db->where('reg_user_id',$aRow['reg_user_id']);
+					    $this->db->where('applied_program',$aRow['applied_program']);
+					    $this->db->update('applicant_rank_master',$data);
+					    echo $aRow['reg_user_id'].' mail sent.';
+					}else{
+						echo 'unable to send mail to '.$aRow['reg_user_id'];
+					}
+	            }
+	           	return $output_data;
+			break;
+			
+			
+			///////////////////////////////////////     santhoshi ////////////////////////////////////////////////////////////////
+			case 'get_file_name': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Updated Successfully";
+            	
+            	$program = $_POST['program'];
+				$reg_user_id = $_POST['reg_user_id'];
+				
+				//echo $program .'hi';
+				
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+			 	date_default_timezone_set('Asia/Kolkata');
+				$date = date('Y-m-d H:i:s', time());
+			//	echo $program .'hi';
+				if($program != ''){
+					$this->db->select('B.file_name');
+					$this->db->from('program_master A');
+					$this->db->join('form_template_master B ',' A.template_code = B.template_code','inner');
+					$this->db->where('A.program_code',$program);
+					$result = $this->db->get();
+					$output_data = $result->result_array();
+					$output = array("aaData" => array());
+					foreach ($output_data as $aRow) 
+	            	{
+	            		$output['aaData'][] = $aRow;
+	            	}
+				}
+				else{
+					$output['aaData'][] = Array('file_name' => 'No Program Selected');
+					
+				}
+				return $output;	
+			break;
+			case 'get_admitcardTemplates':
+				$this->db->select("template_code,template_name,template_description,file_name");
+				$this->db->from('admitcard_template_master');
+				$result = $this->db->get();
+				$this->db->save_queries = TRUE;
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'Add_template_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				
+				$txtTemplateCode = isset($_POST['txtTemplateCode'])?$_POST['txtTemplateCode']:'';
+				$txtTemplateName = isset($_POST['txtTemplateName'])?$_POST['txtTemplateName']:'';
+				$taTemplateDesc = isset($_POST['taTemplateDesc'])?$_POST['taTemplateDesc']:'';
+				$txtFileName = isset($_POST['txtFileName'])?$_POST['txtFileName']:'';
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Inserted";
+				
+				$new_data = array(
+					'template_code'							=>$txtTemplateCode, 
+					'template_name'							=>$txtTemplateName,
+					'template_description'					=>$taTemplateDesc,
+					'file_name'								=>$txtFileName,
+					'created_by'							=>$user,
+					'created_on'							=>$date
+				);
+				$insert_user =  $this->db->insert('admitcard_template_master', $new_data);
+				if( ! $insert_user){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+						$dbError = mysqli_error($con);	
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			case 'Update_template_setup' :
+				$institute_code = $this->session->userdata('institute_code');
+				$logged_user = $this->session->userdata('user_name');
+				$user = $logged_user.'_'.$institute_code;
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+				
+				$hidUniqueid = isset($_POST['hidUniqueid'])?$_POST['hidUniqueid']:'';
+				$txtTemplateCode = isset($_POST['txtTemplateCode'])?$_POST['txtTemplateCode']:'';
+				$txtTemplateName = isset($_POST['txtTemplateName'])?$_POST['txtTemplateName']:'';
+				$taTemplateDesc = isset($_POST['taTemplateDesc'])?$_POST['taTemplateDesc']:'';
+				$txtFileName = isset($_POST['txtFileName'])?$_POST['txtFileName']:'';
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Inserted";
+				
+				$update_data = array(
+					'template_name'							=>$txtTemplateName,
+					'template_description'					=>$taTemplateDesc,
+					'file_name'								=>$txtFileName,
+					'created_by'							=>$user,
+					'created_on'							=>$date
+				);
+				$this->db->where("template_code",$hidUniqueid);
+				$sql = $this->db->update('admitcard_template_master', $update_data);
+				if( ! $sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Updating";
+						$dbError = mysqli_error($con);	
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break;
+			
+			case 'operation_delete_admitcard_templateSetup' :
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Deleted";
+				$template_code=isset($_POST['template_code'])?$_POST['template_code']:'';
+				$date = date('Y-m-d H:i:s', now());
+				
+				$this->db->where("template_code",$template_code);
+				$update_applicant_relation2 = $this->db->delete('admitcard_template_master');
+				//echo $this->db->last_query();
+				if(!$update_applicant_relation2)
+				{
+					$dbstatus = FALSE;
+					$dbmessage = 'Error deleting';
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			case 'select_eligible_cat' :
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		$user_code = $this->session->userdata('user_code');
+        		$institute_code = $this->session->userdata('institute_code');
+        		$program_code = $_POST['program'];
+				//$result1 = $this->db->get();
+				$this->db->select("A.program_code, B.program_name, A.category_code, C.category_name,DATE_FORMAT(birth_start_date, '%d-%m-%Y') AS birth_start_date,DATE_FORMAT(birth_end_date, '%d-%m-%Y') AS birth_end_date");
+				$this->db->from('program_category_eligible_date_setup A');
+				$this->db->join('program_master B','A.program_code = B.program_code','LEFT');
+				$this->db->join('category_master C','A.category_code = C.category_code','LEFT');
+				
+				$this->db->where('B.program_code',$program_code);
+				$this->db->where('A.record_status','1');
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break; 
+			case 'get_program_elig_cat' :
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		$user_code = $this->session->userdata('user_code');
+        		$institute_code = $this->session->userdata('institute_code');
+				//$result1 = $this->db->get();
+				$this->db->select("A.program_code, A.program_name");
+				$this->db->from('program_master A');
+				$this->db->where('A.record_status','1');
+				$this->db->where('institute_code',$institute_code);
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break; 
+			case 'get_cat_elig_cat' :
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		$user_code = $this->session->userdata('user_code');
+        		$institute_code = $this->session->userdata('institute_code');
+				//$result1 = $this->db->get();
+				$this->db->select("C.category_code, C.category_name");
+				$this->db->from('category_master C');
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break; 
+			case 'ADD_CatElig' :
+				$cmbProgram = isset($_POST['cmbProgram'])?$_POST['cmbProgram']:'';
+				$cmbCategory = isset($_POST['cmbCategory'])?$_POST['cmbCategory']:'';
+				$txtAgeStartdate = isset($_POST['txtAgeStartdate'])?$_POST['txtAgeStartdate']:'';
+				$txtAgeEnddate = isset($_POST['txtAgeEnddate'])?$_POST['txtAgeEnddate']:'';
+				
+				$date = date('Y-m-d H:i:s', now());
+				$institute_code = $this->session->userdata("institute_code");
+				
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Data Successfully Inserted";
+				
+				$txtAgeStartdate = date("Y-m-d", strtotime($txtAgeStartdate));
+				$txtAgeEnddate = date("Y-m-d", strtotime($txtAgeEnddate));
+				
+				$this->db->select("COUNT(program_code) as count");
+				$this->db->from('program_category_eligible_date_setup A');
+				$this->db->where('program_code',$cmbProgram);
+				$this->db->where('category_code',$cmbCategory);
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				foreach ($output_data as $aRow) 
+	            {
+	            	$count = $aRow['count'];
+	            }
+            
+				if($count == 0)
+				{
+					$new_array = array( 
+						"program_code"  =>$cmbProgram,
+						"category_code"  =>$cmbCategory,
+						"birth_start_date"  =>$txtAgeStartdate,
+						"birth_end_date" => $txtAgeEnddate,
+					);
+					$sql = $this->db->insert('program_category_eligible_date_setup',$new_array);
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+				}
+				else
+				{
+					$update_data = array(
+						"birth_start_date"  =>$txtAgeStartdate,
+						"birth_end_date" => $txtAgeEnddate,
+					);
+					$this->db->where('program_code',$cmbProgram);
+					$this->db->where('category_code',$cmbCategory);
+					$sql = $this->db->update('program_category_eligible_date_setup', $update_data);
+					//echo $this->db->last_query();
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting";
+					}
+				}
+				
+				
+				
+				
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			case 'UPDATE_CatElig' :
+				
+				$institute_code = $this->session->userdata("institute_code");
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Data Successfully Updated";
+				$cmbProgram = isset($_POST['hidCounsellingPeriod'])?$_POST['hidCounsellingPeriod']:'';
+				$cmbCategory = isset($_POST['hidCounsellingCat'])?$_POST['hidCounsellingCat']:'';
+				$txtAgeStartdate = isset($_POST['txtAgeStartdate'])?$_POST['txtAgeStartdate']:'';
+				$txtAgeEnddate = isset($_POST['txtAgeEnddate'])?$_POST['txtAgeEnddate']:'';
+				$date = date('Y-m-d H:i:s', now());
+				
+				$txtAgeStartdate = date("Y-m-d", strtotime($txtAgeStartdate));
+				$txtAgeEnddate = date("Y-m-d", strtotime($txtAgeEnddate));
+				
+				$update_data = array(
+					"birth_start_date"  =>$txtAgeStartdate,
+					"birth_end_date" => $txtAgeEnddate,
+				);
+				$this->db->where('program_code',$cmbProgram);
+				$this->db->where('category_code',$cmbCategory);
+				$sql = $this->db->update('program_category_eligible_date_setup', $update_data);
+				//echo $this->db->last_query();
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break;
+			
+			case 'operation_delete_CatElig' :
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Deleted";
+				$cmbProgram = isset($_POST['cmbProgram'])?$_POST['cmbProgram']:'';
+				$cmbCategory = isset($_POST['cmbCategory'])?$_POST['cmbCategory']:'';
+				$date = date('Y-m-d H:i:s', now());
+				
+				$this->db->where('program_code',$cmbProgram);
+				$this->db->where('category_code',$cmbCategory);
+				$update_applicant_relation2 = $this->db->delete('program_category_eligible_date_setup');
+				//echo $this->db->last_query();
+				if(!$update_applicant_relation2)
+				{
+					$dbstatus = FALSE;
+					$dbmessage = 'Error deleting';
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			//************************************************* FOR NODAL CENTER TO COUNTER MAPPING ************************************
+			
+			
+			case 'select_program_qual_stream' :
+				$institute_code = $this->session->userdata("institute_code");
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+				//$result1 = $this->db->get();
+				$this->db->select("A.program_code,program_name,A.qualification_code,qualification_name,A.stream_code,stream_name");
+				$this->db->from('program_qualification_stream_setup A');
+				$this->db->join('program_master B','A.program_code = B.program_code','left');
+				$this->db->join('qualification_master C','A.qualification_code = C.qualification_code','left');
+				$this->db->join('stream_master D','D.stream_code = A.stream_code','left');
+				$result = $this->db->get();
+				/*echo $this->db->last_query();
+				die();*/
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break; 
+			
+			case 'select_Stream_Code' :
+				$institute_code = $this->session->userdata("institute_code");
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		$user_code = $this->session->userdata('user_code');
+				//$result1 = $this->db->get();
+				$this->db->select("stream_code,stream_name");
+				$this->db->from('stream_master');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break; 
+			
+			case 'select_program_Stream_Code' :
+				$institute_code = $this->session->userdata("institute_code");
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		$user_code = $this->session->userdata('user_code');
+				//$result1 = $this->db->get();
+				$this->db->select("program_code,program_name");
+				$this->db->from('program_master');
+				$this->db->where('publish_status','YES');
+				$this->db->where('program_group !=','Default Program');
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break; 
+			
+			case 'select_qual_Stream_Code' :
+				$institute_code = $this->session->userdata("institute_code");
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		$user_code = $this->session->userdata('user_code');
+        		$cmbProgram = isset($_POST['program_code'])?$_POST['program_code']:'';
+				//$result1 = $this->db->get();
+				$this->db->select("A.qualification_code,qualification_name");
+				$this->db->from('qualification_master A');
+				
+				if($cmbProgram != '')
+				{
+					$this->db->join('program_qualification_setup B','A.qualification_code = B.qualification_code','left');
+					$this->db->where('program_code',$cmbProgram);
+					$this->db->where('B.record_status','1');
+				}
+				
+				
+				$result = $this->db->get();
+				//echo $this->db->last_query();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break; 
+			case 'ADD_ProgQualStreamMapping' :
+				$cmbProgramCode = isset($_POST['cmbProgramCode'])?$_POST['cmbProgramCode']:'';
+				$cmbQualificationCode = isset($_POST['cmbQualificationCode'])?$_POST['cmbQualificationCode']:'';
+				$cmbStreamCode = isset($_POST['cmbStreamCode'])?$_POST['cmbStreamCode']:'';
+				$date = date('Y-m-d H:i:s', now());
+				$institute_code = $this->session->userdata("institute_code");
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Inserted";
+				
+				$cmbStreamCodeSize = sizeof($cmbStreamCode);
+				
+				for($i = 0;$i < $cmbStreamCodeSize; $i++)
+				{
+					if($cmbStreamCode[$i] != 'multiselect-all')
+					{
+						$this->db->where("stream_code",$cmbStreamCode[$i]);
+						$this->db->where("program_code",$cmbProgramCode);
+						$this->db->where("qualification_code",$cmbQualificationCode);
+						$this->db->select("count(program_code) as program_code");
+						$this->db->from("program_qualification_stream_setup");
+						
+						$result = $this->db->get();
+						$output_data = $result->result_array();
+						foreach($output_data as $row)
+						{
+							$cnt = $row['program_code'];
+						}
+						
+						
+						if($cnt == '0')
+						{
+					
+							$new_array = array( 
+								"program_code"  =>$cmbProgramCode,
+								"qualification_code"  =>$cmbQualificationCode,
+								"stream_code"  =>$cmbStreamCode[$i],
+								"created_by" => 'SUPADM001',
+								"created_on" => $date
+							);
+							$sql = $this->db->insert('program_qualification_stream_setup',$new_array);
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+							}
+						}
+					}
+					
+				}
+				
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			case 'UPDATE_ProgQualStreamMapping' :
+				
+				$institute_code = $this->session->userdata("institute_code");
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Updated";
+				
+				$cmbProgramCode = isset($_POST['hidProgramCode'])?$_POST['hidProgramCode']:'';
+				$cmbQualificationCode = isset($_POST['hidQualCode'])?$_POST['hidQualCode']:'';
+				$cmbStreamCode = isset($_POST['cmbStreamCodeEdit'])?$_POST['cmbStreamCodeEdit']:'';
+				$date = date('Y-m-d H:i:s', now());
+				
+				$update_data = array(
+					"program_code"  =>$cmbProgramCode,
+					"qualification_code"  =>$cmbQualificationCode,
+					"stream_code"  =>$cmbStreamCode,
+					"updated_by" => 'SUPADM001',
+					"updated_on" => $date,
+				);
+				$this->db->where("stream_code",$cmbStreamCode);
+				$this->db->where("program_code",$cmbProgramCode);
+				$this->db->where("qualification_code",$cmbQualificationCode);
+				$sql = $this->db->update('program_qualification_stream_setup', $update_data);
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+				}
+				
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break;
+			
+			case 'operation_deleteQualStreamMapping' :
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Deleted";
+				$hidProgramCode=isset($_POST['hidProgramCode'])?$_POST['hidProgramCode']:'';
+				$hidQualCode=isset($_POST['hidQualCode'])?$_POST['hidQualCode']:'';
+				$hidStreamCode=isset($_POST['hidStreamCode'])?$_POST['hidStreamCode']:'';
+				$date = date('Y-m-d H:i:s', now());
+				
+				$this->db->where("stream_code",$hidStreamCode);
+				$this->db->where("program_code",$hidProgramCode);
+				$this->db->where("qualification_code",$hidQualCode);
+				$update_applicant_relation2 = $this->db->delete('program_qualification_stream_setup');
+				//echo $this->db->last_query();
+				if(!$update_applicant_relation2)
+				{
+					$dbstatus = FALSE;
+					$dbmessage = 'Error deleting';
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			//************************************************* FOR RESULT DETAILS ************************************
+			
+			
+			case 'select_resultDetails' :
+				$institute_code = $this->session->userdata("institute_code");
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d', now());
+        		$logged_user = $this->session->userdata('user_name');
+        		$program = isset($_POST['program'])?$_POST['program']:'';
+        		$round_data = isset($_POST['round_data'])?$_POST['round_data']:'';
+				//$result1 = $this->db->get();
+				$this->db->distinct("B.appl_no");
+				$this->db->select("D.full_name,omr_no,B.appl_no,CONCAT(IFNULL(value,''),'@',IFNULL(publish_status, 'NO')) AS value,IFNULL(FIELD, '') AS FIELD");
+				$this->db->from('admitcard_published B');
+				$this->db->join('admitcard_round_data E','B.omr_no = E.roll_no','left');
+				$this->db->join('applicant_exam_result A','A.applicant_id = B.omr_no AND A.program_code = B.applied_program AND A.round_no = '.$round_data.'','left');
+				$this->db->join('applicant_appl_overview C','B.appl_no = C.appl_no AND B.applied_program = C.applied_program','left');
+				$this->db->join('applicant_master D','C.reg_user_id = D.reg_user_id AND C.applied_program = D.applied_program','left');
+				//$this->db->where("B.created_by",$institute_code);
+				$this->db->where("E.round_no",$round_data);
+				$this->db->where("B.record_status",'1');
+				if($program != '')
+				{
+					$this->db->where('B.applied_program',$program);
+				}
+				$result = $this->db->get();
+				//echo $this->db->last_query(); die();
+				
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break; 
+			case 'ADD_Result' :
+				
+				$appl_no = '';
+				$program_code = '';
+				$date = date('Y-m-d H:i:s', now());
+				$institute_code = $this->session->userdata("institute_code");
+				$logged_user = $this->session->userdata('user_name');
+				//$arr_program_code = call_user_func_array('array_merge', $program_codes);
+				$txtRank = $_POST['txtRank']?$_POST['txtRank']:'';
+				$appl_no = $_POST['appl_no']?$_POST['appl_no']:'';
+				$cmbResult = $_POST['status']?$_POST['status']:'';
+				$round_data = $_POST['round_data']?$_POST['round_data']:'';
+				
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Data Successfully Inserted";
+				
+        		for($i=0;$i<sizeof($appl_no);$i++)
+				{
+					$this->db->select("D.full_name,omr_no,B.applied_program");
+					$this->db->from('admitcard_published B');
+					$this->db->join('applicant_appl_overview C','B.appl_no = C.appl_no','left');
+					$this->db->join('applicant_master D','C.reg_user_id = D.reg_user_id','left');
+					$this->db->where("B.created_by",$logged_user);
+					$this->db->where("B.appl_no",$appl_no[$i]);
+					$result = $this->db->get();
+					/*echo $this->db->last_query();
+					die();*/
+					$output_data = $result->result_array();
+					foreach($output_data as $row)
+					{
+						$txtName = $row['full_name'];
+						$txtRollNo = $row['omr_no'];
+						$program_code = $row['applied_program'];
+					}
+					if($txtRank[$i] != '')
+					{
+						$this->db->where("program_code",$program_code);
+						$this->db->where("applicant_id",$txtRollNo);
+						$this->db->where("round_no",$round_data);
+						$this->db->select("count(program_code) as program_code");
+						$this->db->from("applicant_exam_result");
+						
+						$result = $this->db->get();
+						$output_data = $result->result_array();
+						foreach($output_data as $row)
+						{
+							$cnt = $row['program_code'];
+						}
+						
+						
+						if($cnt == '0')
+						{
+							$new_array = array( 
+								"program_code"  	=>$program_code,
+								"applicant_id"  	=>$txtRollNo,
+								"applicant_name"  	=>$txtName,
+								"field"  			=>$cmbResult[$i],
+								"value"  			=>$txtRank[$i],
+								"round_no"  		=>$round_data,
+								"created_by" 		=>'SUPADM001',
+								"created_on" 		=>$date
+							);
+							$sql = $this->db->insert('applicant_exam_result',$new_array);
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+							}
+						}
+						else
+						{
+							$new_array = array( 
+								"applicant_name"  	=>$txtName,
+								"field"  			=>$cmbResult[$i],
+								"value"  			=>$txtRank[$i],
+								"round_no"  		=>$round_data,
+								"created_by" 		=>'SUPADM001',
+								"created_on" 		=>$date
+							);
+							$this->db->where("program_code",$program_code);
+							$this->db->where("applicant_id",$txtRollNo);
+							$this->db->where("round_no",$round_data);
+							$sql = $this->db->update('applicant_exam_result',$new_array);
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting";
+							}
+						}
+					}
+					
+				}
+				
+				
+
+				$new_array = array( 
+					"user_id"  			=>$logged_user,
+					"round_no"  		=>$round_data,
+					"program_code"  	=>$program_code,
+					"log" 				=>'Add Result',
+					"created_on" 		=>$date
+				);
+				$sql = $this->db->insert('admitcard_log_details',$new_array);
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting admitcard_log_details";
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			case 'publish_result': 
+			 
+				$dbStatus = "SUCCESS";
+				$dbMessage = "Result Publish Successfully";
+				date_default_timezone_set('Asia/Kolkata');
+        		$date = date('Y-m-d H:i:s', now());
+        		$logged_user = $this->session->userdata('user_name');
+				$appl_no = $_POST['appl_no']?$_POST['appl_no']:array();
+				$roll_no = $_POST['arr_roll_no']?$_POST['arr_roll_no']:array();
+				$round_data = $_POST['round_data']?$_POST['round_data']:array();
+				$radioAdmitCard = $_POST['radioAdmitCard']?$_POST['radioAdmitCard']:'';
+				$start_date =  $_POST['txtAvailableFrom'];
+				$end_date = $_POST['txtAvailableUpto'];
+				
+				for($i=0;$i<sizeof($appl_no);$i++)
+				{
+					$new_data = array(
+						'start_date' 					=>date('Y-m-d', strtotime($start_date)),
+						'end_date' 						=>date('Y-m-d', strtotime($end_date)),
+						'publish_status'				=>'YES'
+					);
+					$this->db->where("applicant_id",$roll_no[$i]);
+					$sql = $this->db->update('applicant_exam_result',$new_data);
+					if(!$sql){
+						$dbStatus = "FALSE";
+						$dbMessage = "Error Inserting";
+						//$dbError = ;	
+					}
+					
+					$this->db->select("A.program_code,C.reg_user_id,A.field");
+					$this->db->from('applicant_exam_result A');
+					$this->db->join('admitcard_published B','A.applicant_id = B.omr_no','left');
+					$this->db->join('applicant_appl_overview C','B.appl_no = C.appl_no','left');
+					$this->db->where("B.appl_no",$appl_no[$i]);
+					$this->db->where("B.omr_no",$roll_no[$i]);
+					$result = $this->db->get();
+					/*echo $this->db->last_query();
+					die();*/
+					$output_data = $result->result_array();
+					foreach($output_data as $row)
+					{
+						$status = $row['field'];
+						$reg_user_id = $row['reg_user_id'];
+						$program_code = $row['program_code'];
+					}
+					
+					if($radioAdmitCard == 'N')
+					{
+						if($status == 'Selected')
+						{
+							$new_array = array( 
+								"reg_user_id" 	 	=>$reg_user_id,
+								"appl_no"  			=>$appl_no[$i],
+								"program_code"  	=>$program_code,
+								"roll_no"  			=>$roll_no[$i],
+								"round_no"  		=>$round_data,
+								"created_by" 		=>'SUPADM001',
+								"created_on" 		=>$date
+							);
+							$sql = $this->db->insert('final_result_data',$new_array);
+							if(!$sql){
+								$dbStatus = "ERROR";
+								$dbMessage = "Error Inserting final_result_data";
+							}
+						}
+						
+						
+					}
+					else
+					{
+						$round_data1 = $round_data + 1;
+						$new_data1 = array(
+		                    'appl_no' =>$appl_no[$i],
+		                    'round_no' =>$round_data1,
+		                    'program_code' =>$program_code,
+		                    'reg_user_id' => $reg_user_id,
+		                    'created_by' => $reg_user_id,
+		                    'created_on' => $date
+		               	);   
+			            $new_data_insert = $this->db->insert("admitcard_round_data",$new_data1); 	
+			            //echo $this->db->last_query();die();
+						if(!$new_data_insert)
+						{
+							$dbStatus = FALSE;
+							$dbMessage = 'Error inserting admitcard_round_data';
+						}
+						
+						
+					}
+				}			
+				
+				if($radioAdmitCard == 'N')
+				{
+					$new_array = array( 
+						"user_id"  			=>$logged_user,
+						"round_no"  		=>$round_data,
+						"program_code"  	=>$program_code,
+						"log" 				=>'End',
+						"created_on" 		=>$date
+					);
+					$sql = $this->db->insert('admitcard_log_details',$new_array);
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting admitcard_log_details";
+					}
+				}
+				else
+				{
+					$new_array = array( 
+						"user_id"  			=>$logged_user,
+						"round_no"  		=>$round_data,
+						"program_code"  	=>$program_code,
+						"log" 				=>'Continue',
+						"created_on" 		=>$date
+					);
+					$sql = $this->db->insert('admitcard_log_details',$new_array);
+					if(!$sql){
+						$dbStatus = "ERROR";
+						$dbMessage = "Error Inserting admitcard_log_details";
+					}
+				}
+				if($dbStatus == "SUCCESS")
+				{
+					$output = array("status"=>$dbStatus,"dbMessage"=>$dbMessage);
+				}
+				else
+				{
+					$output = array("status"=>$dbStatus,"dbMessage"=>$dbMessage);
+				}
+				return $output;	
+			break;
+			case 'UPDATE_Result' :
+				
+				$institute_code = $this->session->userdata("institute_code");
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Updated";
+				
+				$program_code = isset($_POST['hidProgramCode'])?$_POST['hidProgramCode']:'';
+				$txtRollNo = isset($_POST['hidRank'])?$_POST['hidRank']:'';
+				$txtName = isset($_POST['txtName'])?$_POST['txtName']:'';
+				$txtRollNo = isset($_POST['txtRollNo'])?$_POST['txtRollNo']:'';
+				$txtRank = isset($_POST['txtRank'])?$_POST['txtRank']:'';
+				$cmbResult = isset($_POST['cmbResult'])?$_POST['cmbResult']:'';
+				
+				$date = date('Y-m-d H:i:s', now());
+				
+				$new_array = array( 
+					"applicant_name"  =>$txtName,
+					"field"  =>$cmbResult,
+					"value"  =>$txtRank,
+					"created_by" => 'SUPADM001',
+					"created_on" => $date
+				);
+				$this->db->where("program_code",$program_code);
+				$this->db->where("applicant_id",$txtRollNo);
+				$sql = $this->db->update('applicant_exam_result',$new_array);
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+				}
+				
+				
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break;
+			
+			case 'operation_deleteResult' :
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Deleted";
+				$program_code = isset($_POST['hidProgramCode'])?$_POST['hidProgramCode']:'';
+				$txtRollNo = isset($_POST['hidRank'])?$_POST['hidRank']:'';
+				$date = date('Y-m-d H:i:s', now());
+				
+				$this->db->where("program_code",$program_code);
+				$this->db->where("applicant_id",$txtRollNo);
+				$update_applicant_relation2 = $this->db->delete('applicant_exam_result');
+				//echo $this->db->last_query();
+				if(!$update_applicant_relation2)
+				{
+					$dbstatus = FALSE;
+					$dbmessage = 'Error deleting';
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			case 'ADD_NEW_FOLDER' :
+				
+				$dbStatus = true;
+				$dbMessage = "Folder Created Successfully";
+				$institute_code = $this->session->userdata("institute_code");
+				$txtFolderName = isset($_POST['txtFolderName'])?$_POST['txtFolderName']:'';
+				$cmbRole = isset($_POST['cmbRole'])?$_POST['cmbRole']:array();
+				$txtFolderDesc = isset($_POST['txtFolderDesc'])?$_POST['txtFolderDesc']:'';
+				//print_r($_POST['cmbRole']);die();
+				$date = date('Y-m-d H:i:s', now());
+				$folder_id = "F".rand(100,9999);
+				$folder_array = array(
+									'folder_id'=>$folder_id,
+									'folder_name'=>$txtFolderName,
+									'folder_description'=>$txtFolderDesc,
+									'created_on'=>$date,
+									'created_by'=>$this->session->userdata("user_code"));
+				$insert_folder = $this->db->insert('folder_detail', $folder_array);		
+				if(!$insert_folder)
+				{
+					$dbStatus = false;
+					$dbMessage = "Folder cannot be Created";
+				}	
+				else
+				{
+					$uploaddir = DOCUMENT_UPLOAD_URL."/folder_list/".$txtFolderName;
+					if(!is_dir($uploaddir))
+						mkdir($uploaddir,0777,true);
+					for($i=0;$i<sizeof($cmbRole);$i++){
+						$folder_role = array('folder_id'=>$folder_id,
+										'role_code'=>$cmbRole[$i],
+										'institute_code'=>$institute_code,
+										'created_on'=>$date,
+										'created_by'=>$this->session->userdata("user_code"));
+						$insert_map = $this->db->insert('folder_role_mapping', $folder_role);		
+						if(!$insert_map)
+						{
+							$dbStatus = false;
+							$dbMessage = "Folder cannot be Created";
+						}	
+					}
+										
+				}		
+				//echo $this->db->last_query();
+				
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			case 'get_role_detail':
+				$this->db->select("*");
+				$this->db->from("role_master");
+				$this->db->where("record_status", 1);
+				$get_role = $this->db->get();//print_r($get_role->result_array());die();
+				return $get_role->result_array();
+			break;
+			case 'get_folder_detail':
+				if($this->input->post('file_search')){
+					$this->db->like("folder_name", $this->input->post('file_search'));
+				}
+				$this->db->select("fd.folder_id,folder_name");
+				$this->db->from("folder_detail fd");
+				$this->db->join("folder_role_mapping frm","fd.folder_id = frm.folder_id","INNER");
+				$this->db->where("institute_code", $this->session->userdata('institute_code'));
+				$this->db->where("role_code", $this->session->userdata('role'));
+				$this->db->order_by('fd.created_on');
+				$get_folder_detail = $this->db->get();//echo $this->db->last_query();die();
+				return $get_folder_detail->result_array();
+			break;
+			case 'GET_FILE_DATA':
+				$txt_folder_id = isset($_POST['folder_id'])?$_POST['folder_id']:'';				
+				if($this->input->post('ssearch_file')){
+					$this->db->like("file_name", $this->input->post('ssearch_file'));
+				}
+				$this->db->select("folder_id,file_id,file_name,DATE_FORMAT(fd.created_on,'%d-%m-%Y %H:%i:%s') AS created_on,fd.created_by,employee_name");
+				$this->db->from("file_detail fd");
+				$this->db->join("user_master um","fd.created_by = um.user_code","INNER");
+				$this->db->where("folder_id", $txt_folder_id);
+				$this->db->order_by('fd.created_on');
+				$get_file_detail = $this->db->get();//echo $this->db->last_query();die();
+				return $get_file_detail->result_array();
+			break;
+			case 'GET_FILE_DETAIL_INFO':
+				$txt_file_id = isset($_POST['file_id'])?$_POST['file_id']:'';
+				$this->db->select("B.folder_name,A.file_name,A.file_type,DATE_FORMAT(A.created_on,'%d-%m-%Y %H:%i:%s') AS created_on,file_size,A.file_description,file_path");
+				$this->db->from("file_detail A");
+				$this->db->join("folder_detail B","A.folder_id = B.folder_id","INNER");
+				$this->db->where("file_id", $txt_file_id);
+				$get_file_detail = $this->db->get();//echo $this->db->last_query();die();
+				return $get_file_detail->result_array()[0];
+			break;
+			case 'ADD_NEW_FILE':
+				
+				$dbstatus = true;
+				$dbmessage = "File Created Successfully";
+				
+				$institute_code = $this->session->userdata("institute_code");
+				
+				$txtFileName = isset($_POST['txtFileName'])?$_POST['txtFileName']:'';
+				$txtFileDesc = isset($_POST['txtFileDesc'])?$_POST['txtFileDesc']:'';
+				$hidFolderId = isset($_POST['hidFolderId'])?$_POST['hidFolderId']:'';//echo $hidFolderId;
+				//$hidFileSize = isset($_POST['hidFileSize'])?$_POST['hidFileSize']:''; 
+				
+				$date = date('Y-m-d H:i:s', now());
+				
+				$this->db->select('ifnull(MAX(file_id),0) AS file_id');
+				$this->db->from('file_detail');
+				$get_id = $this->db->get();//echo $this->db->last_query();die();
+				$id = $get_id->result_array();//print_r($id[0]['file_id']);die();
+				
+				$this->db->select('folder_name');
+				$this->db->from('folder_detail');
+				$this->db->where('folder_id', $hidFolderId);
+				$get_folder = $this->db->get();//echo $this->db->last_query();die();
+				$folder = $get_folder->result_array();
+				
+				$file_id = $id[0]['file_id'];
+				$folder_name = $folder[0]['folder_name'];
+				
+            	$doc_name= explode(".",$_FILES['fileName']['name']); 
+            	$doc_size= $_FILES['fileName']['size'];//print_r($doc_name[1]);die();
+				$pdfFileType = strtolower(end($doc_name));
+						
+				$uploaddir = DOCUMENT_UPLOAD_URL.'/folder_list/'.$folder_name;
+				$retrievedir = BASE_ADM_URL.'/folder_list/'.$folder_name;
+				$docPdfFileName = $file_id.'.'.$pdfFileType;
+				$docPdfPath = $retrievedir."/".$docPdfFileName;
+				//echo $docPdfPath;die();		
+				$config['upload_path'] = $uploaddir; 
+				$config['file_name'] = $file_id;
+				$config['allowed_types'] = 'jpg|png|jpeg|PNG|JPG|JPEG|PDF|pdf';
+				$config['overwrite'] = TRUE;
+					        
+				$this->load->library('upload', $config);
+				$this->upload->initialize($config);
+				if (!$this->upload->do_upload('fileName'))
+				{   	//echo 'if';die();
+					$error = $this->upload->display_errors();
+					$dbstatus = FALSE;
+					$dbmessage = $error;
+				}
+				else
+				{
+					$new_data = array(
+							'file_id' 			=>$file_id+1,
+							'folder_id'			=>$hidFolderId,
+							'file_name'			=>$txtFileName,
+							'file_path' 		=>$docPdfPath,
+							'file_description'	=>$txtFileDesc,
+							'file_size'			=>$doc_size,
+							'file_type'			=>$doc_name[1],
+							'created_by'		=>$this->session->userdata("user_code"),
+							'created_on'		=>$date
+						);
+					$insert_file =  $this->db->insert('file_detail', $new_data);
+					if(!$insert_file){
+						$dbstatus = FALSE;
+						$dbmessage = 'Error While Saving';
+					}
+					
+					//echo $this->db->last_query();		
+				}
+				$output = array("status"=>$dbstatus,"msg"=>$dbmessage);
+				return $output;
+			break; 
+			
+			case 'get_doc_down_list':
+				$cmbProgram = isset($_POST['cmbProgram'])?$_POST['cmbProgram']:'';
+				$round_data = isset($_POST['round_data'])?$_POST['round_data']:'';
+				$this->db->distinct('applicant_name, applicant_id, aao.reg_user_id AS mob_no, VALUE AS marks, aao.appl_no AS appl_no, aao.applied_program AS program');
+				$this->db->select('applicant_name, applicant_id, aao.reg_user_id AS mob_no, VALUE AS marks, aao.appl_no AS appl_no, aao.applied_program AS program');
+				$this->db->from('applicant_exam_result AS aer');
+				$this->db->join('admitcard_published AS ap', 'aer.applicant_id = ap.omr_no', 'inner');
+				$this->db->join('applicant_appl_overview AS aao', 'aao.appl_no = ap.appl_no', 'inner');
+				$this->db->where('aer.field', 'SELECTED');
+				$this->db->where('aer.round_no', $round_data);
+				$this->db->where('aer.program_code', $cmbProgram);
+				$result = $this->db->get();
+				//echo $this->db->last_query();die();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) 
+	                {
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+			case 'get_document_list':
+				$seg_data = $data; //print_r($appl_no);die();
+				$appl_no = $seg_data['appl_no'];
+				$program = $seg_data['prog'];
+				$output_data = array();
+				$this->db->select('safd.*, dtm.*');
+				$this->db->from('document_type_master AS dtm');
+				$this->db->join('selected_program_document_setup AS spds', 'dtm.document_type_code = spds.document_type_code', 'inner');
+				$this->db->join('selected_applicant_form_documents AS safd', 'safd.document_type = spds.document_type_code AND safd.appl_no = "'.$appl_no.'"', 'left');
+				$this->db->where('spds.program_code', $program);
+				$this->db->order_by('spds.sl_no');
+				$result = $this->db->get();//echo $this->db->last_query();die();
+				$output_data = $result->result_array();
+				return array('data'=>$output_data, 'appl_no'=>$appl_no, 'program'=>$program);
+			break;
+			
+			case 'add_document':
+				$dbstatus = true;
+				$dbMessage = "Successfully Submitted";
+				$date = date('Y-m-d H:i:s', now());
+				
+				$appl_no = $this->input->post('hidApplNo'); 
+				$hidProg = $this->input->post('hidProg');
+				
+				$this->db->select("spds.document_type_code");
+				$this->db->from('selected_program_document_setup AS spds'); 
+				$this->db->join('selected_applicant_form_documents AS safd', 'safd.doc_id = spds.document_type_code AND safd.appl_no = "'.$appl_no.'"', 'left');
+				$this->db->where('spds.program_code', $hidProg);
+				$this->db->order_by('spds.sl_no');
+				$result = $this->db->get();//echo $this->db->last_query();die();
+				$output_data = $result->result_array();
+				
+				$i=0;
+				
+				$uploaddir = "DOCUMENTS/".$hidProg."/".$appl_no;
+				$retrievedir = "DOCUMENTS/".$hidProg."/".$appl_no;
+				if(!is_dir($uploaddir))
+					mkdir($uploaddir,0777,true);
+				//exec("chmod -R 777 $uploaddir");//for giving folder permission to downlad that file 
+				
+				//$allowed =  array('jpg','jpeg' ,'png','JPG','PNG','PDF','DOC','pdf','doc','DOCX','docx');
+				
+				foreach($output_data as $row)
+  				{	
+  					$document_type_code = $row['document_type_code']; 
+  					$doc_name= explode(".",$_FILES['fileDocument'.$i]["name"]);
+					$ext_doc = strtolower(end($doc_name));
+					$docImageFileName = $document_type_code.'.'.$ext_doc;
+					$docImagePath = $retrievedir."/".$docImageFileName;
+					$doc_id = $appl_no.'_'.$document_type_code;
+  					$config['upload_path'] = $uploaddir; 
+					$config['file_name'] = $document_type_code.'.'.$ext_doc;
+					$config['allowed_types'] = 'jpg|png|jpeg|PNG|JPG|JPEG|PDF|pdf';
+					$config['overwrite'] = TRUE;
+						        
+					$this->load->library('upload', $config);
+					$this->upload->initialize($config);
+					if(isset($_FILES['fileDocument'.$i]["name"]) && $_FILES['fileDocument'.$i]["name"] != ''){ 
+						if (!$this->upload->do_upload('fileDocument'.$i))
+						{   	//echo 'if';die();
+							$error = $this->upload->display_errors();
+							$dbstatus = FALSE;
+							$dbMessage = $error;
+						}
+	  					else{
+							$this->db->select("count(doc_id) AS doc_id");
+							$this->db->from('selected_applicant_form_documents');
+							$this->db->where('doc_id',$doc_id);
+							
+							$doc_result = $this->db->get();
+							//echo $this->db->last_query();die();
+							$output_doc_data = $doc_result->result_array();
+							
+							foreach ($output_doc_data as $aRow1) 
+		            		{
+		            			$doc_result = $aRow1['doc_id'];//echo $doc_result;
+								if($doc_result >= 1)
+								{ 
+									$update_data = array(
+										'document_submit_date' 			=>$date,
+										'document_path' 				=>$docImagePath,
+										'updated_by'					=>'',
+										'updated_on'					=>$date,
+										'status'						=>'1'
+									);
+									$this->db->where('doc_id',$doc_id);
+									$sql = $this->db->update('selected_applicant_form_documents', $update_data);
+									//echo $this->db->affected_rows();
+									if($this->db->affected_rows() == 0){
+										$dbstatus = false;
+										$dbMessage = "Error while Updating";
+										//$dbError = ;	
+									}
+								}
+								else
+								{ //echo "hi";die();
+									$new_data = array(
+										'appl_no' 						=>$appl_no,
+										'doc_id' 						=>$doc_id,
+										'document_type' 				=>$document_type_code,
+										'document_submit_status' 		=>'Submitted',
+										'document_submit_date' 			=>$date,
+										'submit_mode' 					=>'ONLINE',
+										'document_path' 				=>$docImagePath,
+										'created_by'					=>'',
+										'created_on'					=>$date
+									);
+									
+									
+									$sql = $this->db->insert('selected_applicant_form_documents', $new_data);
+									//echo $this->db->last_query();die();
+									if(!$sql){
+										$dbstatus = false;
+										$dbMessage = "Error while Submitting";
+										//$dbError = ;	
+									}
+								}
+			                } 
+						}
+					}
+					
+  					//print_r($_FILES['fileDocument']['tmp_name'][$i]);die();
+					
+					$i++;
+  				}
+  				return array('status' => $dbstatus, 'msg' =>$dbMessage);
+			break;
+			
+			
+			case 'get_courseSetup':
+				//$institute = $_POST['institute'];
+				$program = $_POST['program_code'];
+				$this->db->select("A.program_code,A.id,program_name,course_name,date_of_exam,timing,session");
+				$this->db->from('course_program_mapping A');
+				$this->db->join('program_master B','A.program_code = B.program_code','LEFT');
+				if($program != '')
+				{
+					$this->db->where('program_code',$program);
+				}
+				$result = $this->db->get();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			case 'Add_course_setup' :
+				$cmbProgram = isset($_POST['cmbProgram'])?$_POST['cmbProgram']:'';
+				//$txtCourseCode = isset($_POST['txtCourseCode'])?$_POST['txtCourseCode']:'';
+				$txtCourseName = isset($_POST['txtCourseName'])?$_POST['txtCourseName']:'';
+				$txtExamDate = isset($_POST['txtExamDate'])?$_POST['txtExamDate']:'';
+				$cmbSession = isset($_POST['cmbSession'])?$_POST['cmbSession']:'';
+				$txtTiming = isset($_POST['txtTiming'])?$_POST['txtTiming']:'';
+				$txtExamDate = date("Y-m-d", strtotime($txtExamDate));
+				
+				$date = date('Y-m-d H:i:s', now());
+				$institute_code = $this->session->userdata("institute_code");
+				$logged_user = $this->session->userdata('user_name');
+				
+				$dbStatus = true;
+				$dbMessage = "Data Successfully Inserted";
+				
+				$new_array = array( 
+					"program_code"  =>$cmbProgram,
+					//"course_code"  	=>$txtCourseCode,
+					"course_name"  	=>$txtCourseName,
+					"date_of_exam" 	=>$txtExamDate,
+					"timing" 		=>$txtTiming,
+					"session" 		=>$cmbSession,
+					"created_by" 	=>$logged_user,
+					"created_on" 	=>$date,
+				);
+				$sql = $this->db->insert('course_program_mapping',$new_array);
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+				}
+				
+				
+				
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			case 'Update_course_setup' :
+				
+				$cmbProgram = isset($_POST['hidUniqueid'])?$_POST['hidUniqueid']:'';
+				$txtCourseCode = isset($_POST['hidUniqueCourseid'])?$_POST['hidUniqueCourseid']:'';
+				$txtCourseName = isset($_POST['txtCourseName'])?$_POST['txtCourseName']:'';
+				$txtExamDate = isset($_POST['txtExamDate'])?$_POST['txtExamDate']:'';
+				$cmbSession = isset($_POST['cmbSession'])?$_POST['cmbSession']:'';
+				$txtTiming = isset($_POST['txtTiming'])?$_POST['txtTiming']:'';
+				$txtExamDate = date("Y-m-d", strtotime($txtExamDate));
+				
+				$date = date('Y-m-d H:i:s', now());
+				$institute_code = $this->session->userdata("institute_code");
+				$logged_user = $this->session->userdata('user_name');
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Updated";
+				
+				$new_array = array( 
+					"course_name"  	=>$txtCourseName,
+					"date_of_exam" 	=>$txtExamDate,
+					"session" 		=>$cmbSession,
+					"timing" 		=>$txtTiming,
+					"updated_by" 	=>$logged_user,
+					"updated_on" 	=>$date,
+				);
+				$this->db->where('program_code',$cmbProgram);
+				$this->db->where('id',$txtCourseCode);
+				$sql = $this->db->update('course_program_mapping', $new_array);
+				//echo $this->db->last_query();
+				if(!$sql){
+					$dbStatus = "ERROR";
+					$dbMessage = "Error Inserting";
+				}
+				
+				
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break;
+				case 'get_template_file':
+				$template_code = isset($_POST['template_code'])?$_POST['template_code']:'';
+				$this->db->select('template_code,template_name,template_description,file_name,id');
+				$this->db->from('form_template_master');
+				$this->db->where('template_code',$template_code);
+               	$res = $this->db->get();
+               	$output = $res->result_array();
+				
+               	return $output;
+				//echo $this->db->last_query();
+               /* $query = $res->result_array();
+                $template_files = array();
+				$sl_no = 1;
+				$output = array("aaData" => array());
+				foreach ($query as $row) 
+                {
+					
+					$output['aaData'][] = $row;
+					$sl_no++;
+				
+				}
+               	return $output; */// Data Send to the controller then datatable
+			break;
+			case 'operation_delete_courseSetup' :
+				
+				$dbStatus = TRUE;
+				$dbMessage = "Data Successfully Deleted";
+				$cmbProgram = isset($_POST['hidUniqueid'])?$_POST['hidUniqueid']:'';
+				$txtCourseCode = isset($_POST['hidUniqueCourseid'])?$_POST['hidUniqueCourseid']:'';
+				$date = date('Y-m-d H:i:s', now());
+				
+				$this->db->where('program_code',$cmbProgram);
+				$this->db->where('id',$txtCourseCode);
+				$update_applicant_relation2 = $this->db->delete('course_program_mapping');
+				//echo $this->db->last_query();
+				if(!$update_applicant_relation2)
+				{
+					$dbstatus = FALSE;
+					$dbmessage = 'Error deleting';
+				}
+				$output = array("status"=>$dbStatus,"msg"=>$dbMessage);
+				return $output;
+			break; 
+			
+			case 'get_profile':
+				$program = $_POST['program'];
+				$filter_data = $_POST['filter_data'];
+				
+				$this->db->select("full_name, am.reg_user_id, applicant_email, DATE_FORMAT(dob, '%d-%m-%Y') AS dob, district_name");
+				$this->db->from('applicant_appl_overview AS aao');
+				$this->db->join('applicant_master AS am', 'aao.reg_user_id = am.reg_user_id AND am.applied_program = aao.applied_program', 'INNER');
+				$this->db->join('district_master AS dm', 'am.district_code = dm.district_code', 'INNER');
+				if($program != '0')
+				{
+					$this->db->where('aao.applied_program', $program);
+				}
+				if($filter_data != '')
+				{
+					if($filter_data == 'document')
+					{
+						$this->db->where('(aao.appl_status="Document Uploaded" OR aao.appl_status="Verified")');
+						//$this->db->or_where('aao.appl_status', 'Verified');
+					}
+					else if($filter_data == 'payment')
+					{
+						$this->db->where('aao.appl_status', 'Verified');
+					}
+				}
+				$result = $this->db->get();//echo $this->db->last_query();die();
+				$output_data = $result->result_array();
+				$output = array("aaData" => array());
+				$slno = 1;
+				foreach ($output_data as $aRow) 
+	            {
+	                $row[0] = $slno;
+	                $row['sl_no'] = $slno;
+	                $i = 1;
+	                foreach ($aRow as $key => $value) {
+
+	                    $row[$i] = $value;
+	                    $row[$key] = $value;
+	                    $i++;
+	                }
+					$output['aaData'][] = $row;
+	                $slno++;
+	                unset($row);
+	            }
+	           	return $output;
+			break;
+			
+            default :
+            	return array('status' => FALSE, 'msg' =>'Unable to load.Contact Support');
+        }
+    }
+    public function split_string($string,$needle,$nth){
+		$max = strlen($string);
+		$n = 0;
+		for($i=0;$i<$max;$i++){
+		    if($string[$i]==$needle){
+		        $n++;
+		        if($n>=$nth){
+		            break;
+		        }
+		    }
+		}
+		$arr[] = substr($string,0,$i);
+		$arr[] = substr($string,$i+1,$max);
+
+		return $arr;
+	}	
+	public function convertBirthdateToText($date){
+		 global $ones, $oneswords, $tens, $triplets;
+		 $ones = array('','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen','Twenty','Twenty-one','Twenty-two','Twenty-three','Twenty-four','Twenty-five','Twenty-six','Twenty-seven','Twenty-eight','Twenty-nine','Thirty','Thirty-one','Thirty-two','Thirty-three','Thirty-four','Thirty-five','Thirty-six','Thirty-seven','Thirty-eight','Thirty-nine','Fourty',
+	      'Fourty-one','Fourty-two','Fourty-three','Fourty-four','Fourty-five','Fourty-six','Fourty-seven','Fourty-eight','Fourty-nine','Fifty','Fifty-one','Fifty-two','Fifty-three','Fifty-four','Fifty-five','Fifty-six','Fifty-seven','Fifty-eight','Fifty-nine','Sixty','Sixty-one','Sixty-two','Sixty-three','Sixty-four','Sixty-five','Sixty-six','Sixty-seven','Sixty-eight','Sixty-nine','Seventy',
+	      'Seventy-one','Seventy-two','Seventy-three','Seventy-four','Seventy-five','Seventy-six','Seventy-seven','Seventy-eight','Seventy-nine','Eighty','Eighty-one','Eighty-two','Eighty-three','Eighty-four','Eighty-five','Eighty-six','Eighty-seven','Eighty-eight','Eighty-nine','Ninety','Ninety-one','Ninety-two','Ninety-three','Ninety-four','Ninety-five','Ninety-six','Ninety-seven','Ninety-eight','Ninety-nine');
+	    
+		$oneswords = array(
+			"",
+			 " first",
+			 " second",
+			 " third",
+			 " fourth",
+			 " fiveth",
+			 " sixth",
+			 " seventh",
+			 " eighth",
+			 " nineth",
+			 " tenth",
+			 " eleventh",
+			 " twelveth",
+			 " thirteenth",
+			 " fourteenth",
+			 " fifteenth",
+			 " sixteenth",
+			 " seventeenth",
+			 " eighteenth",
+			 " nineteenth",
+			 "twentiethth",
+			 "thirtieth"
+		);
+		 
+		$tens = array(
+			 "",
+			 "",
+			 " twenty",
+			 " thirty",
+			 " forty",
+			 " fifty",
+			 " sixty",
+			 " seventy",
+			 " eighty",
+			 " ninety"
+		);
+	    list( $day,$month,$year) = explode('-', $date);
+	    /*echo $date;
+	    die();*/
+	   	" Day: $day; Month: $month; Year: $year<br />\n";
+		$str = "";
+		$year1 ="";
+		$year2 = "";
+		//CONVERT DAY INTO WORDS
+		if($day < '10'){
+			$day = ltrim($day, "0");
+		}
+		if($day == '20'){
+			 $str =  'Twentieth of ';
+		}
+		elseif($day == '30'){
+			 $str =  'Thirtieth of ';
+		}
+		elseif($day < '20'){
+			 $str = ucwords($oneswords[$day]);
+		}
+		elseif($day > '20' && $day < '30' ){
+			$str .= 'Twenty' . ucwords($oneswords[$day % 10]).' of ';
+		}
+		elseif($day > '30'){
+			 $str .= 'Thirty' . ucwords($oneswords[$day % 10]).' of ';
+		}
+		/*echo $str;
+		die();*/
+		//CONVERT MONTH INTO WORDS
+		 $monthName = date('F', mktime(0, 0, 0, $month, 10));
+		 $str .=  " " .$monthName." ";
+		 //CONVERT YEAR INTO WORDS
+		$year1 = substr($year,0,2);
+		$year2 = ltrim(substr($year,2,4), '0');
+		
+		if($year2 != '')
+		{
+			$year_second = substr($year,1,1);
+			
+			if($year_second == 0)
+			{
+				$y = substr($year,0,1);
+				$str .= ucwords($ones[substr($year,0,1)]).' Thousand '.ucwords($ones[$year2]);
+				
+			}
+			else
+			{
+				$str .= ucwords($ones[$year1]).' Hundred '.ucwords($ones[$year2]);
+			}
+			return $str;
+		}
+		else
+		{
+			$str .= ucwords($ones[$year1]).' Hundred ';
+			return $str;
+		}
+		 //$str .= $ones[$year1].' Hundred '.$ones[$year2];
+		  
+		
+	}
+
+}

@@ -1,0 +1,115 @@
+.scroll-hr {
+  height: 50px;	
+  overflow: hidden;
+  position: relative;
+}
+.scroll-hr p {
+    position: absolute;
+    width: 80%;
+    height: 100%;
+    margin: 0;
+/*    line-height: 50px;*/
+    text-align: center;
+
+    /* Starting position */
+       -moz-transform:translateX(100%);
+       -webkit-transform:translateX(100%);	
+       transform:translateX(100%);
+
+ /* Apply animation to this element */	
+       -moz-animation: scroll-hr 17s linear infinite;
+       -webkit-animation: scroll-hr 20s linear infinite;
+       animation: scroll-hr 17s linear infinite;
+}
+
+/* Move it (define the animation) */
+      @-moz-keyframes scroll-hr { 
+       0%   { -moz-transform: translateX(100%); }
+       100% { -moz-transform: translateX(-100%); }
+      }
+      @-webkit-keyframes scroll-hr {
+       0%   { -webkit-transform: translateX(100%); }
+       100% { -webkit-transform: translateX(-100%); }
+      }
+      @keyframes scroll-hr {
+       0%   { 
+       -moz-transform: translateX(100%); /* Firefox bug fix */
+       -webkit-transform: translateX(100%); /* Firefox bug fix */
+       transform: translateX(100%); 		
+       }
+       100% { 
+       -moz-transform: translateX(-100%); /* Firefox bug fix */
+       -webkit-transform: translateX(-100%); /* Firefox bug fix */
+       transform: translateX(-100%); 
+       }
+      }
+.scroll-hr p:hover {
+-moz-animation-play-state: paused;
+-webkit-animation-play-state: paused;
+animation-play-state: paused;
+}
+
+.scroll-hr p:active {
+-moz-animation-play-state: paused;
+-webkit-animation-play-state: paused;
+animation-play-state: paused;
+}
+
+/*Vertical Scroll */
+.scroll-vr {
+  height: 235px;	
+  overflow: hidden;
+  position: relative;
+}
+.scroll-vr .s-vr {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+/*    line-height: 50px;*/
+    text-align: left;
+
+    /* Starting position */
+       -moz-transform:translate(0,0);
+       -webkit-transform:translate(0,0);	
+       transform:translate(0,0);
+
+ /* Apply animation to this element */	
+       -moz-animation: scroll-vr 5s linear infinite;
+       -webkit-animation: scroll-vr 5s linear infinite;
+       animation: scroll-vr 5s linear infinite;
+}
+
+/* Move it (define the animation) */
+      @-moz-keyframes scroll-vr {
+       0%   { -moz-transform: translate(0,0); }
+       100% { -moz-transform: translate(0,-100%); }
+      }
+      @-webkit-keyframes scroll-vr {
+       0%   { -webkit-transform: translate(0,0); }
+       100% { -webkit-transform: translate(0,-100%); }
+      }
+      @keyframes scroll-vr {
+       0%   { 
+       -moz-transform: translate(0,0); /* Firefox bug fix */
+       -webkit-transform: translate(0,0); /* Firefox bug fix */
+       transform: translate(0,0); 		
+       }
+       100% { 
+       -moz-transform: translate(0,-100%); /* Firefox bug fix */
+       -webkit-transform: translate(0,-100%); /* Firefox bug fix */
+       transform: translate(0,-100%); 
+       }
+      }
+
+.scroll-vr .s-vr:hover {
+-moz-animation-play-state: paused;
+-webkit-animation-play-state: paused;
+animation-play-state: paused;
+}  
+
+.scroll-vr .s-vr:active {
+-moz-animation-play-state: paused;
+-webkit-animation-play-state: paused;
+animation-play-state: paused;
+}          

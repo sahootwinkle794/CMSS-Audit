@@ -1,0 +1,474 @@
+<?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
+
+class Ajax_controller extends CI_Controller 
+{
+	public function __construct()
+	{
+		parent::__construct();
+		# helpers
+		$this->load->helper(array('form'));
+		# library
+		$this->load->library('form_validation');
+		#models
+		$this->load->model('Superadmin_model');
+	}
+	
+	/*
+	*	purpose : if request is not an ajax request then show error
+	*/
+	public function _remap($method){
+		self::$method();		
+	}
+	
+	/**
+	*	purpose : get extension 
+	*/
+	private function getExtension($pFileName = null) 
+	{
+		 $i = strrpos($pFileName,".");
+		 if( !$i ) {
+			return false;
+		 }			 
+		 $nameLength = strlen($pFileName) - $i;
+		 return substr($pFileName,$i+1,$nameLength);
+	}
+
+	/**
+	*	purpose : Generate unique id
+	*/
+	private function get_unique_id()
+	{
+		return $id = md5(strtotime(date('Y-m-d H:i:s'))).uniqid();
+	}
+	
+	/*
+	*	Return data to the user data
+	*/
+	
+	/**
+	* Author   		: Rahul Patro,Ashish Narayan Barick,Lina Mohapatra  
+	* Function 		: get_datatable_data,
+	* purpose  		: To show data in datatable, 
+	* List of data 	:User, Menu, Role, Resource, Group
+	* Date     		: 11/09/2017
+	* Remark   		:  Get data from model and forward data as JSON 
+	*/
+	
+    public function get_datatable_data()
+    {
+		$type = $this->uri->segment(3);
+		echo json_encode($this->Superadmin_model->superadmin($_POST, $type));
+	}   
+    
+	
+	/**
+	* Author   : Rahul Patro, 
+	* Function : operation_userdata,
+	* purpose  : user data operation, 
+	* Date     : 11/09/2017
+	* Remark   : server-side validation,data operation 
+	* 			 send to model side
+	*/
+   
+    public function operation_userdata(){
+    	if($_POST['hiduser_name'] == $_POST['txtUserName'] && $_POST['op_type'] == 'edit_user'){
+			$config = array(
+               
+               array(
+                     'field'   => 'txtDisplayName',
+                     'label'   => 'Display Name',
+                     'rules'   => 'required'
+                  )
+            );
+		}else{
+			$config = array(
+               array(
+                     'field'   => 'txtUserName',
+                     'label'   => 'User Name',
+                     'rules'   => 'trim|required|is_unique[user_master.user_name]'
+                  ),
+               array(
+                     'field'   => 'txtDisplayName',
+                     'label'   => 'Display Name',
+                     'rules'   => 'required'
+                  )
+            );
+		}
+		
+  		$this->form_validation->set_rules($config);
+		if ($this->form_validation->run() == FALSE) {
+			$data = array(
+                'status' => 'validationerror',
+                'msg' => validation_errors()
+            );
+            echo json_encode($data);
+		    //echo validation_errors();
+		}else{
+			echo json_encode($this->Superadmin_model->superadmin($_POST, $_POST['op_type']));
+		} 
+		
+	}
+	public function operation_institute(){
+    	if($_POST['op_type'] == 'edit_institute'){
+			$config = array(
+               
+               array(
+                     'field'   => 'txtInstituteCode',
+                     'label'   => 'Display Name',
+                     'rules'   => 'required'
+                  )
+            );
+		}else{
+			$config = array(
+               array(
+                     'field'   => 'institutecode',
+                     'label'   => 'Institute Code',
+                     'rules'   => 'trim|required|is_unique[institute_master.institute_code]'
+                  ),
+               array(
+                     'field'   => 'institutename',
+                     'label'   => 'Institute Name',
+                     'rules'   => 'required'
+                  ),
+               array(
+                     'field'   => 'txtinstituteType',
+                     'label'   => 'Institute Type',
+                     'rules'   => 'required'
+                  ),
+               array(
+                     'field'   => 'instituteadmindisplayname',
+                     'label'   => 'Display Name',
+                     'rules'   => 'required'
+                  ),
+               array(
+                     'field'   => 'instituteadminusername',
+                     'label'   => 'Admin User Name',
+                     'rules'   => 'trim|required'
+                  ),
+               array(
+                     'field'   => 'txtContactNo',
+                     'label'   => 'Contact No',
+                     'rules'   => 'required'
+                  )
+               
+            );
+		}
+  		$this->form_validation->set_rules($config);
+		if ($this->form_validation->run() == FALSE) {
+			$data = array(
+                'status' => 'validationerror',
+                'msg' => validation_errors()
+            );
+            echo json_encode($data);
+		    //echo validation_errors();
+		}
+		else
+		{
+			if (!empty($_FILES['fileinstitutelogo']['name']))
+			{
+				
+				echo $fileName = explode(".",$_FILES['fileinstitutelogo']['name']);
+				die();
+			  	/*$ext = strtolower(end($fileName));
+			  	$newfilename = $_POST['institutecode'].".".$ext;
+				$config['upload_path'] = '/public/assets/images/logo/';
+			    $config['allowed_types'] = 'jpeg|jpg|png';
+			    $config['max_size'] = '1024';
+			    $config['max_width']  = '1024';
+			    $config['max_height']  = '768';
+			    $config['file_name'] = $newfilename;
+				$this->load->library('upload', $config);*/
+			}
+			if (!empty($_FILES['fileInstituteImage']['name']))
+			{
+				
+				
+				$fileName = explode(".",$_FILES['fileInstituteImage']['name']);
+				die())
+			  	/*$ext = strtolower(end($fileName));
+			  	$newfilename = $_POST['institutecode'].".".$ext;
+				$config['upload_path'] = '/public/assets/images/';
+			    $config['allowed_types'] = 'jpeg|jpg|png';
+			    $config['max_size'] = '1024';
+			    $config['max_width']  = '1024';
+			    $config['max_height']  = '768';
+			    $config['file_name'] = $newfilename;
+				$this->load->library('upload', $config);*/
+			}
+			
+			echo json_encode($this->Superadmin_model->superadmin($_POST, $_POST['op_type']));
+		} 
+		
+	} 
+	
+	/**
+	* Author   : Ashish Narayan Barick, 
+	* Function : operation_menudata,
+	* purpose  : Menu data operation, 
+	* Date     : 11/09/2017
+	* Remark   : server-side validation,data operation 
+	* 			 send to model side
+	*/
+	
+	public function operation_menudata(){
+		$config = array(
+               array(
+                     'field'   => 'txtmenulinktext',
+                     'label'   => 'Link Text',
+                     'rules'   => 'trim|required'
+                  ),
+               array(
+                     'field'   => 'cmbMenuLinkURL',
+                     'label'   => 'Link Url',
+                     'rules'   => 'trim|required'
+                  ),
+               array(
+                     'field'   => 'cmbMenuParent',
+                     'label'   => 'Parent',
+                     'rules'   => 'trim|required'
+                  ),
+               array(
+                     'field'   => 'txtMenuslno',
+                     'label'   => 'Menu Sl No',
+                     'rules'   => 'trim|required'
+                  )
+            );
+  		$this->form_validation->set_rules($config);
+		if ($this->form_validation->run() == FALSE) 
+		{
+			$error_data = array(
+                'status' => 'validationerror',
+                'msg' => validation_errors()
+            );
+            echo json_encode($error_data);
+		    //echo validation_errors();
+		}
+		else
+		{
+			echo json_encode($this->Superadmin_model->superadmin($_POST, $_POST['op_type']));
+		} 	
+	} 
+	/**
+	* Author   : lina Mohapatra, 
+	* Function : operation_roledata,
+	* purpose  : Role data operation, 
+	* Date     : 12/09/2017
+	* Remark   : server-side validation,data operation 
+	* 			 send to model side
+	*/
+	public function operation_roledata(){
+		if($_POST['op_type_role'] == 'edit_role'){
+			$config = array(
+               array(
+                     'field'   => 'txtroleName',
+                     'label'   => 'Role Name',
+                     'rules'   => 'required'
+                  ),
+               array(
+                     'field'   => 'txtLandingPage',
+                     'label'   => 'Landing Page',
+                     'rules'   => 'required'
+                  )
+            );
+			
+		}
+		else{
+			$config = array(
+               array(
+                     'field'   => 'txtrolecode',
+                     'label'   => 'Role Code',
+                     'rules'   => 'trim|required|is_unique[role_master.role_code]'
+                  ),
+               array(
+                     'field'   => 'txtroleName',
+                     'label'   => 'Role Name',
+                     'rules'   => 'required'
+                  ),
+               array(
+                     'field'   => 'txtLandingPage',
+                     'label'   => 'Landing Page',
+                     'rules'   => 'required'
+                  )
+            );
+		}
+		
+		$this->form_validation->set_rules($config); 
+	    if ($this->form_validation->run() == FALSE) {
+			$data = array(
+                'status' => 'validationerror',
+                'msg' => validation_errors()
+            );
+            echo json_encode($data);
+		    //echo validation_errors();
+		}else{
+			echo json_encode($this->Superadmin_model->superadmin($_POST, $_POST['op_type_role']));
+		} 
+		
+	}
+	
+	/**
+	* Author   : lina Mohapatra, 
+	* Function : operation_resourcedata,
+	* purpose  : Resource data operation, 
+	* Date     : 11/09/2017
+	* Remark   : server-side validation,data operation 
+	* 			 send to model side
+	*/
+	
+	public function operation_resourcedata(){
+		
+		$config = array(
+           array(
+                 'field'   => 'txtresourcelink',
+                 'label'   => 'Resource Link',
+                 'rules'   => 'required'
+              ),
+           array(
+                 'field'   => 'txtresourceName',
+                 'label'   => 'Resource Name',
+                 'rules'   => 'required'
+              )
+        );
+		
+		$this->form_validation->set_rules($config); 
+		
+	    if ($this->form_validation->run() == FALSE) {
+			$data = array(
+                'status' => 'validationerror',
+                'msg' => validation_errors()
+            );
+            echo json_encode($data);
+		    
+		}else{
+			echo json_encode($this->Superadmin_model->superadmin($_POST, $_POST['op_type_resource']));
+		} 
+		
+	}
+	
+	/**
+	* Author   : Rahul Patro, 
+	* Function : Show table data,
+	* purpose  : to show table data in dropdown, 
+	* Date     : 11/09/2017
+	* Remark   : it will get the table name and 
+	* 			 fetch the code and name from that table			 
+	*/
+	public function get_tablevalue(){
+		echo json_encode($this->Superadmin_model->superadmin($_POST, 'get_tablevalue'));
+	}
+	public function operation_groupdata(){
+		$config = array(
+           array(
+                 'field'   => 'txtGroupName',
+                 'label'   => 'User Name',
+                 'rules'   => 'trim|required'
+              ),
+           array(
+                 'field'   => 'cmbtable',
+                 'label'   => 'Display Name',
+                 'rules'   => 'trim|required'
+              )
+        );
+	
+  		$this->form_validation->set_rules($config);
+		if ($this->form_validation->run() == FALSE) {
+			$data = array(
+                'status' => 'validationerror',
+                'msg' => validation_errors()
+            );
+            echo json_encode($data);
+		    //echo validation_errors();
+		}else{
+			echo json_encode($this->Superadmin_model->superadmin($_POST, $_POST['op_type_group']));
+		} 
+		
+	} 
+	/**
+	* Author   : Ashish Narayan Barick, Rahul Patro, Lina Mohapatro
+	* Function : delete_data
+	* purpose  : Menu data delete operation, User Data delete operation, role and resoarce delete operation
+	* Date     : 11/09/2017
+	* Remark   : Delete data
+	*/
+	
+	public function delete_data()
+	{
+		echo json_encode($this->Superadmin_model->superadmin($_POST, $_POST['op_type']));
+	}
+	
+	/**
+	* Author   : lina Mohapatra, 
+	* Function : operation_role_group_data,
+	* purpose  : role_group data operation, 
+	* Date     : 14/09/2017
+	* Remark   : server-side validation,data operation 
+	* 			 send to model side
+	*/
+	
+		public function operation_role_group_data(){
+	
+			$config = array(
+               array(
+                     'field'   => 'cmbrolecode',
+                     'label'   => 'Role Name',
+                     'rules'   => 'required'
+                  ),
+               array(
+                     'field'   => 'cmbgroupcode',
+                     'label'   => 'Group Name',
+                     'rules'   => 'required'
+                  ),
+               array(
+                     'field'   => 'txtRoleGroup',
+                     'label'   => 'Role Group Name',
+                     'rules'   => 'required'
+                  )
+            );
+			
+			$this->form_validation->set_rules($config); 
+		    if ($this->form_validation->run() == FALSE) {
+				$data = array(
+	                'status' => 'validationerror',
+	                'msg' => validation_errors()
+	            );
+	            echo json_encode($data);
+			    //echo validation_errors();
+			}else{
+				echo json_encode($this->Superadmin_model->superadmin($_POST, $_POST['op_type_role_group']));
+			} 
+			
+		}
+	/**
+	* Author   : lina Mohapatra, 
+	* Function : operation_user_rolegroup_data,
+	* purpose  : role_group data operation, 
+	* Date     : 14/09/2017
+	* Remark   : server-side validation,data operation 
+	* 			 send to model side
+	*/
+	
+		public function operation_user_rolegroup_data(){
+	
+			$config = array(
+               array(
+                     'field'   => 'txtrole_group',
+                     'label'   => 'Role-Group Name',
+                     'rules'   => 'required'
+                  ),
+            
+            );
+			
+			$this->form_validation->set_rules($config); 
+		    if ($this->form_validation->run() == FALSE) {
+				$data = array(
+	                'status' => 'validationerror',
+	                'msg' => validation_errors()
+	            );
+	            echo json_encode($data);
+			    //echo validation_errors();
+			}else{
+				echo json_encode($this->Superadmin_model->superadmin($_POST, $_POST['op_type_user_role_group']));
+			} 
+			
+		}
+}

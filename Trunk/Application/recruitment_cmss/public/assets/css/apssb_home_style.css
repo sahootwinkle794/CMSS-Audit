@@ -1,0 +1,240 @@
+
+/*@import url('https://fonts.googleapis.com/css?family=Montserrat|Open+Sans|Poppins&display=swap');
+
+	
+@font-face {
+    font-family: Montserrat !important;
+}
+body{
+	font-family: Montserrat !important;
+	font-weight:400;overflow-x:hidden;overflow-y:auto
+}*/
+.table-bordered {
+	    border: 0px solid #f4f4f4;
+}
+/*p{
+	color: black;
+	font-size: 15px;
+	font-family: Montserrat !important;
+	font-weight: 600;
+}
+*/	
+.table-bordered > thead > tr > th, .table-bordered > tbody > tr > th, .table-bordered > tfoot > tr > th, .table-bordered > thead > tr > td, .table-bordered > tbody > tr > td, .table-bordered > tfoot > tr > td {
+border: 0px solid #fff;
+}
+table.front {
+    background-color: #ffffff;
+    border: 1px solid #29A9EA;
+    border-collapse: collapse;
+    width: 100%;
+	}
+
+table.front td {
+border: 1px solid #29A9EA;
+padding: 8px 10px;
+color: #000000;
+vertical-align: top;
+}
+
+.box-head {
+    background: #003;
+    height: 32px;
+    color: #fff;
+    padding: 0 10px;
+    line-height: 32px;
+    white-space: nowrap;
+    border-bottom: solid 1px #fff;
+    text-align: center;
+	}
+.box-green{
+	background: linear-gradient(to bottom,#073f73, #1c6ebd);
+	width: 111%;
+	padding: 14px;
+	margin-bottom: 5px;
+}
+.outer-box {
+    /*min-height: 100%;*/
+    height: auto;
+   	margin-top: 13px;
+    border-radius: 10px;
+    box-shadow: 0px 0px 6px 0px #aaa6a6;
+}
+.box-top
+{
+	
+    font-size: 15px;
+    color: #0D173B;
+    left: 26px;
+    padding: 15px;
+}
+.table-bordered > thead > tr > th, .table-bordered > tbody > tr > th, .table-bordered > tfoot > tr > th, .table-bordered > thead > tr > td, .table-bordered > tbody > tr > td, .table-bordered > tfoot > tr > td {
+    border: 1px solid #E8E8E8;
+    height: 45px;
+    text-align:center;
+    padding: 18px;
+}
+/*.table-bordered > thead > tr , .table-bordered > tbody > tr , .table-bordered > tfoot > tr , .table-bordered > thead > tr, .table-bordered > tbody > tr , .table-bordered > tfoot > tr  {
+    border: 1px solid #E8E8E8;
+    
+}*/
+.button-orange {
+    background: #4d0000d9;
+    border-radius: 8px;
+    height: 36px;
+    color: white;
+    text-align: center;
+}
+.button-green{
+	background: #007447;
+	border-radius: 8px;
+    height: 45px;
+    color: white;
+    width: 25%;
+    text-align: center;
+    margin-top: -5px;
+}
+.img1
+{
+	
+	margin-top: 14px;
+}
+
+
+.Ann {
+    background-color: #fa6765;
+
+	height: 40px;
+
+	border-radius: 20px;
+
+	padding-bottom: 20px;
+	width: 91%;
+    left: 5%;
+	margin-top: 5px;
+}
+
+.imgLabel-1 {
+    position: absolute;
+    color: white;
+    top: 3px;
+    left: -14px;
+    width: 100%;
+    font-size: 15px;
+    margin-top: -3px;
+    z-index: 1;
+}
+.ann_label_home {
+	    font-size: 14px;
+    	padding-top: 10px;
+	    	
+}	
+.annc-text{
+	color: white;
+	position: absolute;
+	padding-left: 15%;
+	font-size: 15px;
+	padding-top: 5px;
+}
+/*.navbar-nav > li {
+    float: left;
+    margin-top: -8px;
+    margin-left: 20px;
+}*/
+@media screen and (min-width: 1200px) {
+	/*.container {
+	    width: 1350px;
+	}*/
+	.ul-top {
+	    position: absolute;
+	    margin-top: -26px;
+	    left: 4%;
+	}
+}
+@media screen and (max-width: 600px) {
+	/*.navbar-nav > li {
+
+	    float: left;
+	    margin-top: -31px;
+	    margin-left: 14px;
+	    width: 100%;
+	    text-align: center;
+
+	}*/
+	.ann_label_home {
+
+	    font-size: 14px;
+	    left: 0%;
+   		 padding-top: 10px;
+
+	}
+	.Ann {
+    background-color: #fa6765;
+    height: 40px;
+    border-radius: 20px;
+    padding-bottom: 13px;
+    width: 91%;
+    left: 5%;
+    margin-top: 5px;
+	}
+	.box-green {
+
+   
+    width: 193%;
+    padding: 18px;
+    margin-bottom: 5px;
+
+	}
+	
+	.img1 {
+
+	    margin-left: 127px;
+	    margin-top: 14px;
+
+	}
+	.button-orange {
+	    width: 40%;
+	}
+	.button-green {
+	    width: 40%;
+	}
+}
+@media screen and (max-width: 800px) {
+	.button-orange {
+	    width: 40%;
+	}
+	.button-green {
+	    width: 40%;
+	}
+	.box-green {
+
+	   
+	    width: 91%;
+	    padding: 14px;
+	    margin-bottom: 5px;
+
+	}
+	.ann_label_home {
+
+	    font-size: 14px;
+	    left: 0%;
+    	padding-top: 10px;
+
+	}
+	/*.navbar-nav > li {
+
+		float: left;
+		margin-top: -30px;
+		margin-left: 20px;
+
+	}
+*/
+}
+@media screen and (max-width: 414px) {
+.button-orange {
+	    width: 80%;
+    	margin-bottom: 8px;
+	}
+	.button-green {
+	    width: 80%;
+	}
+}

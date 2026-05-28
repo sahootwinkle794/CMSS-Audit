@@ -1,0 +1,23 @@
+
+
+
+
+
+
+cipet/public/assets/js/admin/manageApplication.js
+cipet/application/views/apply/institute_page.php
+cipet/application/views/apply/template008.php
+cipet/application/view/admin/manageApplication.php
+cipet/application/view/template_config/header_index.php
+cipet/application/models/Admin_model.php
+
+
+
+
+
+insert into `sms_provider_setup` (`provider_name`, `sms_url`, `user_name`, `password`, `sender`, `created_by`, `created_on`, `updated_by`, `updated_on`, `record_status`, `last_update`) values('CIPET','http://103.233.76.120/api/mt/SendSMS?APIKey=7H9lDjJNo0CJCeuQFrNmjQ&senderid=CIPETE&channel=trans&DCS=0&flashsms=0&number=91[mobile_no]&text=[subject]&route=1','CIPETE','Od1$h@123','CIPET',NULL,NULL,NULL,NULL,'1','2018-04-26 15:28:07');
+
+insert into `state_master` (`id`, `state_code`, `state_name`, `country_code`, `created_by`, `created_on`, `updated_by`, `updated_on`, `record_status`, `last_updated`) values('32','AN','Andaman & Nicobar','IND',NULL,NULL,NULL,NULL,'1','2016-05-20 12:19:15');
+
+
+

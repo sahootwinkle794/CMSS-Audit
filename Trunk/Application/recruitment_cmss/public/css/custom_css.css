@@ -1,0 +1,29 @@
+.skin-blue .sidebar-menu>li.groupactive>a {
+    color: #fff;
+    background: #1e282c;
+    border-left-color: #3c8dbc;
+}
+
+.skin-blue .sidebar-menu .treeview-menu>li.itemactive>a {
+    color: #fff;
+}
+.btn-circle {
+  width: 30px;
+  height: 30px;
+  text-align: center;
+  padding: 6px 0;
+  font-size: 12px;
+  line-height: 1.42;
+  border-radius: 15px;
+}
+.dataTable>thead
+{
+	background: #fff;
+	background-image: linear-gradient(to bottom, #f3f8f9 20%, #d9f9f4 80%, #caf5ef 100%);
+	color: #333;
+}
+td.dt-center { text-align: center; }
+.upper
+{
+	text-transform: uppercase;
+}

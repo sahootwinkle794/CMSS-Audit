@@ -1,0 +1,3227 @@
+$(document).ready(function(){
+	var isDelete= false;
+	var isEdit = false;
+	MY_SESSION_NAME = '';
+	var templateMaster = $('#tblTemplateMaster').dataTable({
+		
+		"sAjaxSource": base_url+"ajax_controller/select_template",
+		"bPaginate": true,
+        "bLengthChange": true,
+        "bFilter": true,
+        "bSort": false,
+        "bInfo": true,
+        "bAutoWidth": false,
+		"sDom":"<'row'<'col-xs-4'i><'col-xs-4'l><'col-xs-4'f>r>t<'row'<'col-xs-6' <'row' <'col-xs-8 institutegroupbutton' >>><'col-xs-6'p>>",
+		"aoColumns": [
+	                     { "sName": "Slno","sWidth":"5%" },
+	                     { "sName": "Code","sWidth":"15%" },
+	                     { "sName": "Name","sWidth":"15%" },
+						 { "sName": "Description","sWidth":"40%" },
+	                     { "sName": "File Name","sWidth":"25%","mRender": function( data, type, full ) {
+						 		//templateMaster.removeClass('success');
+				                return '<a href="../../'+data+'" target="_blank" style="color:blue">'+data+'</a>';
+				            } },
+	                     { "sName": "id","bVisible":false}
+        ]
+	});
+/**CREATING BUTTON*****/
+
+	$("div.institutegroupbutton").html('<div class="btngroup"><button id="btnAddTemplate" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i> Add</button>&nbsp;<button class="btn btn-success" id="btnEditTemplate"><i class="fa fa-edit"></i> Edit</button>&nbsp;<button class="btn btn-danger" id="btnDeleteTemplate"><i class="fa fa-trash-o" aria-hidden="true"></i> Delete</button></div>');
+
+/*****END OF BUTTON CREATION******/
+
+	
+/*****END OF AJAX CALL TO GET DATA FROM DATABASE**********/
+
+	$('#btnAddTemplate').click(function(){
+		$('#frmAddTemplate').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+		$('#txtTemplateCode').val("");
+		$('#txtTemplateName').val("");
+		$('#txtFileName').val("");
+		
+		$('#templateAddModal').modal('show');
+		$('#templateAddModal').on('shown.bs.modal', function () 
+		{ 
+			$('#txtTemplateCode').focus(); // Focusing the textbox
+		})
+	});
+	
+	$('#btnEditTemplate').click(function(){
+		if(isEdit){
+			$('#templateEditModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}	
+	});
+	$('#btnDeleteTemplate').click(function(){
+		if(isDelete){
+		
+		$('#templateDeleteModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}
+		
+	});
+// to select data when edit button is click
+	$('#tblTemplateMaster tbody').on('click', function (event) {	
+		isEdit = true;	
+		isDelete = true;			
+			$(templateMaster.fnSettings().aoData).each(function (){
+			$(this.nTr).removeClass('success');
+		});
+		//alert(event.target.tagName);
+		if(event.target.tagName == "BUTTON" || event.target.tagName == "A" || event.target.tagName == "IMG")
+	  		row = event.target.parentNode.parentNode;
+		else if(event.target.tagName == "I")
+	  		row = event.target.parentNode.parentNode.parentNode; 
+	  	else
+	  		row = event.target.parentNode;
+		$(row).addClass('success');
+		var templateID = templateMaster.fnGetData( event.target.parentNode )[1];//GETTING DATA FOR HIDDEN COLUMN
+		
+		$('#hidUniqueidEdit').val(templateID);//GETTING VALUE FOR HIDDEN COLUMN
+		
+		$('#txtTemplateCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtTemplateNameEdit').val(event.target.parentNode.cells[2].innerHTML);
+		$('#textTemplateDescriptionEdit').val(event.target.parentNode.cells[3].innerHTML);
+		$(event.target.parentNode).addClass('success');
+		//$('#txtFileNameEdit').val(event.target.parentNode.cells[3].innerHTML);
+		var filename = "";
+		var selectedText = event.target.parentNode.cells[4].textContent; 
+		filename = selectedText.split("-");
+		//alert(filename[1]);
+		$("#txtFileNameEdit").val(filename[1]) 
+	});
+//ADD RECORD WITH VALIDATION
+
+	$('#frmAddTemplate').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			var institutedata={
+				txtTemplateCode:$('#txtTemplateCode').val(),
+				txtTemplateName:$('#txtTemplateName').val(),
+				textTemplateDescription:$('#textTemplateDescription').val(),
+				txtFileName:$('#txtFileName').val(),
+				type:"INSERT_TEMPLATE"
+			};
+			//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){  
+					var dtblProgram = $("#tblTemplateMaster").DataTable();
+		 			dtblProgram.ajax.reload();
+		 			$('#frmAddTemplate').data('bootstrapValidator').resetForm(true);	
+					toastr.success('Data Successfully Inserted');				
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});//end of ajax call	
+		},
+		fields: {
+			txtTemplateCode: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 5 characters'
+						}
+				}
+			},
+			txtTemplateName: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			textTemplateDescription: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtFileName: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+	});
+//END OF ADD RECORD WITH VALIDATION
+
+
+//EDIT RECORD WITH VALIDATION
+
+	$('#frmTemplateEdit').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+							
+			var institutedata={
+				hidUniqueidEdit:$('#hidUniqueidEdit').val(),
+				txtTemplateCodeEdit:$('#txtTemplateCodeEdit').val(),
+				txtTemplateNameEdit:$('#txtTemplateNameEdit').val(),
+				textTemplateDescriptionEdit:$('#textTemplateDescriptionEdit').val(),
+				txtFileNameEdit:$('#txtFileNameEdit').val(),
+				type:"UPDATE_TEMPLATE"
+			};
+		//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){  
+							$('#templateEditModal').modal('hide');		
+							var dtblProgram = $("#tblTemplateMaster").DataTable();
+				 			dtblProgram.ajax.reload();
+				 			$('#frmTemplateEdit').data('bootstrapValidator').resetForm(true);	
+							toastr.success('Data Successfully Updated');
+									
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});
+		},
+		fields:{
+			txtTemplateCodeEdit: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 5 characters'
+						}
+				}
+			},
+			txtTemplateNameEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			textTemplateDescriptionEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtFileNameEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+			
+	});
+//END OF EDIT RECORD WITH VALIDATION
+
+/****DELETE RECORD DELETE********/
+	$('#templateDeleteRecord').click(function()
+	{
+		$('#templateDeleteModal').modal('hide');		
+		var institutedata=
+		{
+			templateID:$('#hidUniqueidEdit').val(),
+			type:"DELETE_TEMPLATE"
+		};		
+		//ajax call to server
+		$.ajax({
+			url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+			mType:"post",
+			data:institutedata,
+			success:function()
+			{  
+				 var dtblProgram = $("#tblTemplateMaster").DataTable();
+	 			dtblProgram.ajax.reload();
+	 			
+				toastr.success('Data Successfully Deleted');				 
+			},
+			error:function()
+			{
+				toastr.error('Unable to process please contact support');
+			}
+		});		
+	});
+	$('#txtTemplateCode').on("change",function(event)
+	{
+			if($(event.target).val() != "" && $(event.target).val() != undefined)
+			{
+				var institutedata=
+				{
+					txtCode:$(event.target).val(),
+					validatemenucode:true,
+					type:"CHKDUCPLICATE_CODE"
+				};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					//alert(response)
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmAddTemplate').data('bootstrapValidator').updateStatus('txtTemplateCode', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	// CHECKING DUPLICATION OF MENU CODE FOR EDIT
+	$('#txtTemplateCodeEdit').on("change",function(event)
+	{
+			if($(event.target).val() != "" && $(event.target).val() != undefined)
+			{
+				var institutedata=
+				{
+					txtCodeEdit:$(event.target).val(),
+					validatemenucode:true,
+					type:"CHKEDITDUCPLICATE_CODE"
+				};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmTemplateEdit').data('bootstrapValidator').updateStatus('txtTemplateCodeEdit', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	});
+	//********************************************************** FOR MENU TAB****************************************//
+	
+	var programMenuMaster = $('#tblMenuMaster').dataTable({
+		
+		"sAjaxSource": base_url+"ajax_controller/select_program_menu",
+		"bPaginate": true,
+        "bLengthChange": true,
+        "bFilter": true,
+        "bSort": false,
+        "bInfo": true,
+        "bAutoWidth": false,
+		"sDom":"<'row'<'col-xs-4'i><'col-xs-4'l><'col-xs-4'f>r>t<'row'<'col-xs-6' <'row' <'col-xs-8 menubutton' >>><'col-xs-6'p>>",
+		"aoColumns": [
+	                     { "sName": "Slno","sWidth": "3%" },
+	                     { "sName": "Code" },
+	                     { "sName": "link text" },
+	                     { "sName": "link url" },
+						 { "sName": "new window" },
+						 { "sName": "document upload","sWidth": "12%" },
+						 { "sName": "record status","sWidth": "8%","sClass":"alignCenter",
+							"mRender": function( data, type, full ) {
+						        return '<img src="'+base_url+'public/assets/images/'+ data +'.png" ></img>';
+					    }},
+						 { "sName": "menu slno" },
+	                     { "sName": "id","bVisible":false }
+        			]
+	});
+/**CREATING BUTTON*****/
+
+	$("div.menubutton").html('<div class="btngroup"><button id="btnAddMenu" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i> Add</button>&nbsp;<button class="btn btn-danger" id="btnEditMenu"><i class="fa fa-edit"></i> Edit</button></div>');
+
+/*****END OF BUTTON CREATION******/
+
+	$('#btnAddMenu').click(function(){
+		$('#frmMenuAdd').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+		$('#txtMenuCode').val("");
+		$('#txtLinkText').val("");
+		$('#hidOperProgramMenu').val("add_program_menu");
+		
+		$('#txtLinkURL').val("");
+		$('#cmbNewWindow').val("");
+		$('#cmbDocumentUpload').val("");
+		$('#cmbRecordStatus').val("");
+		$('#txtProgramMenuSlno').val("");
+		
+		$('#menuAddModal').modal('show');
+		$('#menuAddModal').on('shown.bs.modal', function () 
+		{ 
+			$('#txtMenuCode').focus(); // Focusing the textbox
+		})
+	});
+	
+	$('#btnEditMenu').click(function(){
+		if(isEdit){
+			$('#hidOperProgramMenuEdit').val("edit_program_menu");
+			$('#menuEditModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}	
+	});
+	$('#btnDeleteMenu').click(function(){
+		if(isDelete){
+		
+		$('#menuDeleteModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}
+		
+	});
+// to select data when edit button is click
+	$('#tblMenuMaster tbody').on('click', function (event) {	
+		isEdit = true;	
+		isDelete = true;			
+			$(programMenuMaster.fnSettings().aoData).each(function (){
+			$(this.nTr).removeClass('success');
+		});
+		//alert(event.target.tagName);
+		
+		var menuID = programMenuMaster.fnGetData( event.target.parentNode )[8];//GETTING DATA FOR HIDDEN COLUMN
+		if(event.target.tagName == "BUTTON" || event.target.tagName == "A" || event.target.tagName == "IMG")
+	  		row = event.target.parentNode.parentNode;
+		else if(event.target.tagName == "I")
+	  		row = event.target.parentNode.parentNode.parentNode; 
+	  	else
+	  		row = event.target.parentNode;
+		$(row).addClass('success');
+		$('#hidUniqueidEdit').val(menuID);//GETTING VALUE FOR HIDDEN COLUMN
+		
+		$('#txtMenuCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtLinkTextEdit').val(event.target.parentNode.cells[2].innerHTML);
+		$('#txtLinkURLEdit').val(event.target.parentNode.cells[3].innerHTML);
+		
+		var selectedText = event.target.parentNode.cells[4].innerHTML; 
+		$("#cmbNewWindowEdit option").each(function () {
+			if ($(this).html() == selectedText) {
+				$(this).attr("selected", "selected");
+				return;
+			}
+		});
+		var selectedText2 = event.target.parentNode.cells[5].innerHTML;
+		$("#cmbDocumentUploadEdit option").each(function () 
+		{
+			if ($(this).html() == selectedText2)
+		 	{
+				$(this).attr("selected", "selected");
+				return;
+			}
+		});
+		var selectedText3 = event.target.parentNode.cells[6].innerHTML;
+		$("#cmbRecordStatusEdit option").each(function () 
+		{
+			if ($(this).html() == selectedText3)
+		 	{
+				$(this).attr("selected", "selected");
+				return;
+			}
+		});
+		$('#txtProgramMenuSlnoEdit').val(event.target.parentNode.cells[7].innerHTML);
+	});
+//ADD RECORD WITH VALIDATION
+
+	$('#frmMenuAdd').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			$("#spanProcessingMenu").show();
+			var formData = new FormData(document.getElementById("frmMenuAdd"));
+			var institutedata={
+				txtMenuCode:$('#txtMenuCode').val(),
+				txtLinkText:$('#txtLinkText').val(),
+				txtLinkURL:$('#txtLinkURL').val(),
+				cmbNewWindow:$('#cmbNewWindow').val(),
+				cmbDocumentUpload:$('#cmbDocumentUpload').val(),
+				cmbRecordStatus:$('#cmbRecordStatus').val(),
+				txtProgramMenuSlno:$('#txtProgramMenuSlno').val(),
+				type:"INSERT_MENU"
+			};
+			//ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/operation_program_menu_add",
+				type:"post",
+				data:formData,
+				cache: false,
+		        contentType: false,
+		        processData: false,
+				success:function(){  
+					try
+					{
+						var obj = jQuery.parseJSON(response);
+						if(obj.status == true)
+						{
+							toastr.success(obj.msg);
+							var dtblProgram = $("#tblMenuMaster").DataTable();
+				 			dtblProgram.ajax.reload();
+				 			$('#frmMenuAdd').data('bootstrapValidator').resetForm(true);
+				    		
+						}
+						else if(obj.status === 'validationerror'){
+		                	$('#errorlog_menu_add').html(obj.msg);
+		                	$('#errorlog_menu_add').show();
+		                }
+						else if(obj.status === 'xsserror'){
+		                	$('#errorlog_menu_add').html(obj.msg);
+		                	$('#errorlog_menu_add').show();
+		                }
+						else 
+						{
+							sweetAlert("MENU",obj.msg, "error");	
+						}
+					}
+					catch(e)
+					{
+						sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+					}
+					$("#spanProcessingMenu").hide();
+						
+					//toastr.success('Data Successfully Inserted');				
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});//end of ajax call	
+		},
+		fields: {
+			txtMenuCode: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 8 characters'
+						}
+				}
+			},
+			txtLinkText: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtLinkURL: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbNewWindow: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbDocumentUpload: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbRecordStatus: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtProgramMenuSlno: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					digits:{
+						message:'This field can contain only digit'
+					}
+				}
+			}
+		}
+	});
+//END OF ADD RECORD WITH VALIDATION
+
+
+//EDIT RECORD WITH VALIDATION
+
+	$('#frmMenuEditModal').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			$("#spanProcessingMenuEdit").show();
+			var formData = new FormData(document.getElementById("frmMenuEditModal"));	
+			var institutedata={
+				hidUniqueidEdit:$('#hidUniqueidEdit').val(),
+				txtMenuCodeEdit:$('#txtMenuCodeEdit').val(),
+				txtLinkTextEdit:$('#txtLinkTextEdit').val(),
+				txtLinkURLEdit:$('#txtLinkURLEdit').val(),
+				cmbNewWindowEdit:$('#cmbNewWindowEdit').val(),
+				cmbDocumentUploadEdit:$('#cmbDocumentUploadEdit').val(),
+				cmbRecordStatusEdit:$('#cmbRecordStatusEdit').val(),
+				txtProgramMenuSlnoEdit:$('#txtProgramMenuSlnoEdit').val(),
+				type:"UPDATE_MENU"
+			};
+		//ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/operation_program_menu_edit",
+				type:"post",
+				data:formData,
+				cache: false,
+		        contentType: false,
+		        processData: false,
+				success:function(){ 
+					try
+					{
+						var obj = jQuery.parseJSON(response);
+						if(obj.status == true)
+						{
+							toastr.success(obj.msg);
+							var dtblProgram = $("#tblMenuMaster").DataTable();
+				 			dtblProgram.ajax.reload();
+				 			$('#frmMenuEditModal').data('bootstrapValidator').resetForm(true);
+				    		
+						}
+						else if(obj.status === 'validationerror'){
+		                	$('#errorlog_menu_edit').html(obj.msg);
+		                	$('#errorlog_menu_edit').show();
+		                }
+						else if(obj.status === 'xsserror'){
+		                	$('#errorlog_menu_edit').html(obj.msg);
+		                	$('#errorlog_menu_edit').show();
+		                }
+						else 
+						{
+							sweetAlert("MENU",obj.msg, "error");	
+						}
+						$("#spanProcessingMenuEdit").hide();
+					}
+					catch(e)
+					{
+						sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+					}
+						
+					//toastr.success('Data Successfully Inserted');			
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});
+		},
+		fields:{
+			txtMenuCodeEdit: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 8 characters'
+						}
+				}
+			},
+			txtLinkTextEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtLinkURLEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbNewWindowEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbDocumentUploadEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbRecordStatusEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtProgramMenuSlnoEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					digits:{
+						message:'This field can contain only digit'
+					}
+				}
+			}
+		}
+			
+	});
+//END OF EDIT RECORD WITH VALIDATION
+
+/****DELETE RECORD DELETE********/
+	$('#menuDeleteRecord').click(function()
+	{
+		$('#menuDeleteModal').modal('hide');		
+		var institutedata=
+		{
+			menuID:$('#hidUniqueidEdit').val(),
+		};		
+		//ajax call to server
+		$.ajax({
+			url:base_url+"ajax_controller/operation_program_menu_delete",
+			type:"post",
+			data:formData,
+			cache: false,
+	        contentType: false,
+	        processData: false,
+			success:function()
+			{  
+				try
+				{
+					var obj = jQuery.parseJSON(response);
+					if(obj.status == true)
+					{
+						toastr.success(obj.msg);
+						var dtblProgram = $("#tblMenuMaster").DataTable();
+			 			dtblProgram.ajax.reload();
+					}
+					else 
+					{
+						sweetAlert("MENU",obj.msg, "error");	
+					}
+				}
+				catch(e)
+				{
+					sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+				}
+				var dtblProgram = $("#tblMenuMaster").DataTable();
+	 			dtblProgram.ajax.reload();
+	 			
+				toastr.success('Data Successfully Deleted');				 
+			},
+			error:function()
+			{
+				toastr.error('Unable to process please contact support');
+			}
+		});		
+	});
+	// CHECKING DUPLICATION OF MENU CODE 
+	$('#txtMenuCode').on("change",function(event)
+	{
+			if($(event.target).val() != "" && $(event.target).val() != undefined)
+			{
+				var institutedata=
+				{
+					txtMenuCode:$(event.target).val()
+					
+				};
+		   //ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/check_program_menu_code",
+				type:"post",
+				data:institutedata,
+				cache: false,
+		        contentType: false,
+		        processData: false,
+				success:function(response)
+				{
+					
+					var obj = jQuery.parseJSON(response);
+					if(obj.status)
+					{
+					 	$(event.target).val("");
+					 	$('#frmMenuAdd').data('bootstrapValidator').updateStatus('txtMenuCode', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	// CHECKING DUPLICATION OF MENU CODE FOR EDIT
+	$('#txtMenuCodeEdit').on("change",function(event)
+	{
+			if($(event.target).val() != "" && $(event.target).val() != undefined)
+			{
+				var institutedata=
+				{
+					txtMenuCodeEdit:$(event.target).val()
+				};
+		   //ajax call to server
+			$.ajax({
+					
+				url:base_url+"ajax_controller/check_program_menu_code_edit",
+				type:"post",
+				cache: false,
+		        contentType: false,
+		        processData: false,
+				data:institutedata,
+				success:function(response)
+				{
+					
+					var obj = jQuery.parseJSON(response);
+					if(obj.status)
+					{
+					 	$(event.target).val("");
+					 	$('#frmMenuEdit').data('bootstrapValidator').updateStatus('txtMenuCodeEdit', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	});
+	
+	//**************************************************** FOR PROGRAM GROUP TAB************************************//
+	
+	var programGroup = $('#tblProgramGroup').dataTable({
+			
+		"sAjaxSource": base_url+"ajax_controller/select_program_group",
+		"bPaginate": true,
+        "bLengthChange": true,
+        "bFilter": true,
+        "bSort": false,
+        "bInfo": true,
+		"bDestroy" : true,
+        "bAutoWidth": false,
+		"sDom":"<'row'<'col-xs-4'i><'col-xs-4'l><'col-xs-4'f>r>t<'row'<'col-xs-6' <'row' <'col-xs-8 programgroupbutton' >>><'col-xs-6'p>>",
+		"aoColumns": [
+	                     { "sName": "Slno","sWidth": "5%" },
+	                     { "sName": "program_group_code" },
+	                     { "sName": "program_group_name" },
+						 { "sName": "Record Status" ,"sWidth": "10%","sClass":"alignCenter",
+							"mRender": function( data, type, full ) {
+						        return '<img src="'+base_url+'public/assets/images/'+ data +'.png" ></img>';
+					    }},
+        			]
+	});
+		/**CREATING BUTTON*****/
+	$("div.programgroupbutton").html('<div class="btngroup"><button id="btnAddProgramGroup" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i> Add</button>&nbsp;<button class="btn btn-success" id="btnEditProgramGroup"><i class="fa fa-edit"></i> Edit</button></div>');
+/*****END OF BUTTON CREATION******/
+	
+	
+	$('#btnAddProgramGroup').click(function(){
+	//alert("hello");
+		//$('#frmAddCentre').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+		$('#txtProgramGroupCode').val("");
+		$('#txtProgramGroupName').val("");
+		$('#hidOperProgramGroup').val("add_program_group");
+		$('#txtStatus').val("");
+		
+		$('#programGroupAddModal').modal('show');
+		$('#programGroupAddModal').on('shown.bs.modal', function () 
+		{ 
+			$('#txtProgramGroupCode').focus(); // Focusing the textbox
+		})
+	});
+	$('#btnEditProgramGroup').click(function(){
+		if(isEdit){
+			$('#hidOperProgramGroupEdit').val("edit_program_group");
+			$('#programGroupEditModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}	
+	});
+	$('#btnDeleteGroup').click(function(){
+		if(isDelete){
+		//$('#hidProgramGroupCodeEdit').val('')
+		$('#programGroupDeleteModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}
+		
+	});
+	$('#tblProgramGroup tbody').on('click', function (event) {	
+		isEdit = true;	
+		isDelete = true;		
+		$(programGroup.fnSettings().aoData).each(function (){
+			$(this.nTr).removeClass('success');
+		});
+		//alert(event.target.tagName);
+		if(event.target.tagName == "BUTTON" || event.target.tagName == "A" || event.target.tagName == "IMG")
+	  		row = event.target.parentNode.parentNode;
+		else if(event.target.tagName == "I")
+	  		row = event.target.parentNode.parentNode.parentNode; 
+	  	else
+	  		row = event.target.parentNode;
+		$(row).addClass('success');
+		var programCode = programGroup.fnGetData( event.target.parentNode )[1];//GETTING DATA FOR HIDDEN COLUMN
+		//$(event.target.parentNode).addClass('success');
+		$('#hidProgramGroupCodeEdit').val(event.target.parentNode.cells[1].innerHTML);//GETTING VALUE FOR HIDDEN COLUMN
+		$('#hidProgramGroupCodeDelete').val(event.target.parentNode.cells[1].innerHTML);//GETTING VALUE FOR HIDDEN COLUMN
+		
+		//$('#cmbProgramCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtProgramGroupCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtProgramGroupNameEdit').val(event.target.parentNode.cells[2].innerHTML);
+		$('#cmbStatusEdit').val(event.target.parentNode.cells[3].innerHTML);
+		
+		var selectedText2 = programGroup.fnGetData( event.target.parentNode )[3];
+		$("#cmbStatusEdit option").each(function () 
+		{
+			if ($(this).html() == selectedText2)
+		 	{
+				$(this).attr("selected", "selected");
+				return;
+			}
+		});
+	});
+
+   
+ 	$('#frmAddProgramGroup').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			//alert($('#cmbProgramCode').val());
+			
+			var formData = new FormData(document.getElementById("frmAddProgramGroup"));
+			//ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/operation_program_group_add",
+				type:"post",
+				data:formData,
+				contentType: false,
+		        processData: false,
+				success:function(){
+					try
+					{
+						var obj = jQuery.parseJSON(response);
+						if(obj.status == true)
+						{
+							toastr.success(obj.msg);
+							var dtblProgramGroup = $("#tblProgramGroup").DataTable();
+		 					dtblProgramGroup.ajax.reload();
+		 					$('#frmAddProgramGroup').data('bootstrapValidator').resetForm(true);
+							$('#errorlog_program_group').hide();
+				    		
+						}
+						else if(obj.status === 'validationerror'){
+		                	$('#errorlog_program_group').html(obj.msg);
+		                	$('#errorlog_program_group').show();
+		                }
+						else if(obj.status === 'xsserror'){
+		                	$('#errorlog_program_group').html(obj.msg);
+		                	$('#errorlog_program_group').show();
+		                }
+						else 
+						{
+							sweetAlert("PROGRAM GROUP",obj.msg, "error");	
+						}
+					}
+					catch(e)
+					{
+						sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+					}
+						
+					//toastr.success('Data Successfully Inserted');			
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}  
+						
+
+			});//end of ajax call	
+		},
+		fields: {
+			txtProgramGroupCode: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtProgramGroupName: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbStatus: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+	});
+	$('#frmEditProgramGroup').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+					
+			var formData = new FormData(document.getElementById("frmEditProgramGroup"));
+			//ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/operation_program_group_edit",
+				type:"post",
+				contentType: false,
+		    	processData: false,
+				data:formData,
+				success:function(response){ 
+					try
+					{
+						var obj = jQuery.parseJSON(response);
+						if(obj.status == true)
+						{
+							toastr.success(obj.msg);
+							var dtblProgramGroup = $("#tblProgramGroup").DataTable();
+		 					dtblProgramGroup.ajax.reload();
+		 					$('#frmEditProgramGroup').data('bootstrapValidator').resetForm(true);
+				    		
+						}
+						else if(obj.status === 'validationerror'){
+		                	$('#errorlog_program_group_edit').html(obj.msg);
+		                	$('#errorlog_program_group_edit').show();
+		                }
+						else if(obj.status === 'xsserror'){
+		                	$('#errorlog_program_group_edit').html(obj.msg);
+		                	$('#errorlog_program_group_edit').show();
+		                }
+						else 
+						{
+							sweetAlert("PROGRAM GROUP",obj.msg, "error");	
+						}
+					}
+					catch(e)
+					{
+						sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+					}
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});
+		},
+		fields:{
+			txtProgramGroupCodeEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtProgramGroupNameEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbStatusEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+			
+	});
+	$('#groupDeleteRecord').click(function()
+	{
+		$('#groupDeleteModal').modal('hide');		
+		var institutedata=
+		{
+			hidProgramGroupCodeEdit:$('#hidProgramGroupCodeDelete').val(),
+		};		
+		//ajax call to server
+		$.ajax({
+			url:base_url+"ajax_controller/operation_program_group_delete",
+			type:"post",
+			contentType: false,
+		    processData: false,
+			data:institutedata,
+			success:function(response)
+			{  
+				var obj = jQuery.parseJSON(response);
+				if(obj.status)
+				{
+					var dtblChallan = $("#tblProgramGroup").DataTable();
+		 			dtblChallan.ajax.reload();
+					toastr.success(msg);
+					
+				}
+				else
+				{
+					toastr.success(msg);
+				}
+								 
+			},
+			error:function()
+			{
+				toastr.error('Unable to process please contact support');
+			}
+		});		
+	});
+	// CHECKING DUPLICATION OF PROGRAM CODE
+	$('#txtProgramGroupCode').on("change",function(event)
+	{
+			if($(event.target).val() != "" && $(event.target).val() != undefined)
+			{
+				var institutedata=
+				{
+					txtProgramGroupCode:$(event.target).val()
+				};
+		   //ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/check_program_group_code",
+				type:"post",
+				data:institutedata,
+				success:function(response)
+				{
+					var obj = jQuery.parseJSON(response);
+					if(obj.status)
+					{
+					 	$(event.target).val("");
+					 	$('#frmAddProgramGroup').data('bootstrapValidator').updateStatus('txtProgramGroupCode', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	//****************************************** FOR DOCUMENT TAB *****************************************//
+	
+	var documentMaster = $('#tblDocumentMaster').dataTable({
+		
+		"sAjaxSource": base_url+"ajax_controller/select_program_document",
+		"bPaginate": true,
+        "bLengthChange": true,
+        "bFilter": true,
+        "bSort": false,
+        "bInfo": true,
+        "bAutoWidth": true,
+		"sDom":"<'row'<'col-xs-4'i><'col-xs-4'l><'col-xs-4'f>r>t<'row'<'col-xs-6' <'row' <'col-xs-8 documentgroupbutton' >>><'col-xs-6'p>>",
+		"aoColumns": [
+	                     { "sName": "Slno" ,"sWidth": "5%"},
+	                     { "sName": "Code" },
+	                     { "sName": "name" },
+	                     { "sName": "document_description","bVisible":false },
+	                     { "sName": "document_size_description","bVisible":false },
+	                     { "sName": "document_size" },
+	                     { "sName": "document_preview_height" },
+	                     { "sName": "document_preview_width" },
+	                     { "sName": "id","bVisible":false }
+        			]
+	});
+	CKEDITOR.replace("txtDocumentDesc",{
+					startupFocus : true
+				});
+	CKEDITOR.replace("txtDocumentDescEdit",{
+					startupFocus : true
+				});
+	CKEDITOR.replace("txtDocumentSizeDesc",{
+					
+				});
+	CKEDITOR.replace("txtDocumentSizeDescEdit",{
+					
+				});
+	CKEDITOR.config.toolbar = [
+					{ name: 'document', groups: [ 'mode', 'document', 'doctools' ], items: [ 'Source' ] },
+					{ name: 'clipboard', groups: [ 'clipboard', 'undo' ], items: [ 'Cut', 'Copy', 'Paste', 'PasteText', 'PasteFromWord', '-', 'Undo', 'Redo' ] },
+					{ name: 'editing', groups: [ 'find', 'selection', 'spellchecker' ], items: [ 'Scayt' ] },
+					
+					{ name: 'basicstyles', groups: [ 'basicstyles', 'cleanup' ], items: [ 'Bold', 'Italic', 'Underline', 'Strike', 'Subscript', 'Superscript', '-', 'RemoveFormat' ] },
+					{ name: 'paragraph', groups: [ 'list', 'indent', 'blocks', 'align', 'bidi' ], items: [ 'NumberedList', 'BulletedList', '-', 'Outdent', 'Indent', '-', 'Blockquote' ] },
+					'/',	
+					{ name: 'insert', items: [ 'Table', 'HorizontalRule', 'Symbol', 'base64image' ] },
+					{ name: 'styles', items: [ 'Styles', 'Format' ] },
+					{ name: 'colors', items : [ 'TextColor','BGColor' ] }
+					
+					
+				];
+				CKEDITOR.config.extraPlugins = 'lineutils,widget,codesnippet,symbol,base64image';
+				CKEDITOR.config.codeSnippet_theme = 'mono-blue';
+				CKEDITOR.config.allowedContent = true;
+				CKEDITOR.config.height = 100;
+/**CREATING BUTTON*****/
+	$("div.documentgroupbutton").html('<div class="btngroup"><button id="btnAddDocument" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i> Add</button>&nbsp;<button class="btn btn-success" id="btnEditDocument"><i class="fa fa-edit"></i> Edit</button>&nbsp;<button class="btn btn-danger" id="btnDeleteDocument"><i class="fa fa-trash-o" aria-hidden="true"></i> Delete</button></div>');
+
+/*****END OF BUTTON CREATION******/
+
+	$('#btnAddDocument').click(function(){
+		$('#frmDocumentAdd').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+		$('#txtDocumentCode').val("");
+		$('#txtDocumentName').val("");
+		$('#txtLinkURL').val("");
+		$('#hidOperDocument').val("add_document");
+		
+		$('#documentAddModal').modal('show');
+		$('#documentAddModal').on('shown.bs.modal', function () 
+		{ 
+			$('#txtDocumentCode').focus(); // Focusing the textbox
+		})
+	});
+	
+	$('#btnEditDocument').click(function(){
+		if(isEdit){
+			$('#hidOperDocumentEdit').val("edit_document");
+			$('#documentEditModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}	
+	});
+	$('#btnDeleteDocument').click(function(){
+		if(isDelete){
+		
+		$('#documentDeleteModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}
+		
+	});
+// to select data when edit button is click
+	$('#tblDocumentMaster tbody').on('click', function (event) {	
+		isEdit = true;	
+		isDelete = true;			
+			$(documentMaster.fnSettings().aoData).each(function (){
+			$(this.nTr).removeClass('success');
+		});
+		var documentID = documentMaster.fnGetData( event.target.parentNode )[8];//GETTING DATA FOR HIDDEN COLUMN
+		var document_description = documentMaster.fnGetData( event.target.parentNode )[3];//GETTING DATA FOR HIDDEN COLUMN
+		var document_size_description = documentMaster.fnGetData( event.target.parentNode )[4];//GETTING DATA FOR HIDDEN COLUMN
+		//alert(document_description);
+		if(event.target.tagName == "BUTTON" || event.target.tagName == "A" || event.target.tagName == "IMG")
+	  		row = event.target.parentNode.parentNode;
+		else if(event.target.tagName == "I")
+	  		row = event.target.parentNode.parentNode.parentNode; 
+	  	else
+	  		row = event.target.parentNode;
+		$(row).addClass('success');
+		$('#hidDUniqueidEdit').val(documentID);//GETTING VALUE FOR HIDDEN COLUMN
+		//alert($('#hidUniqueidEdit').val());
+		//$('#hidUniqueidEdit').val(documentID);//GETTING VALUE FOR HIDDEN COLUMN
+		CKEDITOR.instances['txtDocumentDescEdit'].setData(document_description);
+		CKEDITOR.instances['txtDocumentSizeDescEdit'].setData(document_size_description);
+		$('#txtDocumentCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtDocumentNameEdit').val(event.target.parentNode.cells[2].innerHTML);
+		$('#txtDocumentSizeEdit').val(event.target.parentNode.cells[3].innerHTML);
+		$('#txtDocumentHeightEdit').val(event.target.parentNode.cells[4].innerHTML);
+		$('#txtDocumentWidthEdit').val(event.target.parentNode.cells[5].innerHTML);
+		
+	});
+//ADD RECORD WITH VALIDATION
+
+	$('#frmDocumentAdd').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			var formData = new FormData(document.getElementById("frmDocumentAdd"));
+			//ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/operation_program_document_add",
+				type:"post",
+				data:formData,
+				contentType: false,
+		    	processData: false,
+				success:function(response){  
+					try
+					{
+						var obj = jQuery.parseJSON(response);
+						if(obj.status == true)
+						{
+							toastr.success(obj.msg);
+							var dtblProgram = $("#tblDocumentMaster").DataTable();
+		 					dtblProgram.ajax.reload();
+		 					$('#frmDocumentAdd').data('bootstrapValidator').resetForm(true);
+				    		
+						}
+						else if(obj.status === 'validationerror'){
+		                	$('#errorlog_document').html(obj.msg);
+		                	$('#errorlog_document').show();
+		                }
+						else 
+						{
+							sweetAlert("DOCUMENT",obj.msg, "error");	
+						}
+					}
+					catch(e)
+					{
+						sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+					}		
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});//end of ajax call	
+		},
+		fields: {
+			txtDocumentCode: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					}
+				}
+			},
+			txtDocumentName: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+	});
+//END OF ADD RECORD WITH VALIDATION
+
+
+//EDIT RECORD WITH VALIDATION
+
+	$('#frmDocumentEdit').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+					
+			var formData = new FormData(document.getElementById("frmDocumentEdit"));
+			//ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/operation_program_document_edit",
+				type:"post",
+				data:formData,
+				contentType: false,
+		    	processData: false,
+				success:function(response){ 
+					try
+					{
+						var obj = jQuery.parseJSON(response);
+						if(obj.status == true)
+						{
+							toastr.success(obj.msg);
+							// 
+							var dtblProgram = $("#tblDocumentMaster").DataTable();
+							$('#frmDocumentEdit').data('bootstrapValidator').resetForm(true);
+				 			dtblProgram.ajax.reload();
+				    		
+						}
+						else if(obj.status === 'validationerror'){
+		                	$('#errorlog_document_edit').html(obj.msg);
+		                	$('#errorlog_document_edit').show();
+		                }
+						else 
+						{
+							sweetAlert("DOCUMENT",obj.msg, "error");	
+						}
+					}
+					catch(e)
+					{
+						sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+					}		
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});
+			$('#documentEditModal').modal('hide');
+		},
+		fields:{
+			txtDocumentCodeEdit: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					}
+				}
+			},
+			txtDocumentNameEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+			
+	});
+//END OF EDIT RECORD WITH VALIDATION
+
+/****DELETE RECORD DELETE********/
+	$('#documentDeleteRecord').click(function()
+	{
+		$('#documentDeleteModal').modal('hide');		
+		var institutedata=
+		{
+			documentID:$('#hidDUniqueidEdit').val(),
+			
+		};		
+		//ajax call to server
+		$.ajax({
+			url:base_url+"ajax_controller/operation_program_document_delete",
+			type:"post",
+			data:institutedata,
+			success:function(response)
+			{  
+				try
+				{
+					var obj = jQuery.parseJSON(response);
+					if(obj.status == true)
+					{
+						toastr.success(obj.msg);
+						var dtblProgram = $("#tblDocumentMaster").DataTable();
+	 					dtblProgram.ajax.reload();
+	 					
+					}
+					else
+					{
+						toastr.error(obj.msg);
+					}
+				}
+				catch(e)
+				{
+					sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+				}	
+				$('#documentDeleteModal').modal('hide');			 
+			},
+			error:function()
+			{
+				toastr.error('Unable to process please contact support');
+			}
+		});		
+	});
+	// CHECKING DUPLICATION OF MENU CODE 
+	$('#txtDocumentCode').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				txtDocumentCode:$(event.target).val()
+			};
+		   //ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/check_document",
+				type:"POST",
+				data:institutedata,
+				success:function(response)
+				{
+					var obj = jQuery.parseJSON(response);
+					if(obj.status)
+					{
+					 	$(event.target).val("");
+					 	$('#frmDocumentAdd').data('bootstrapValidator').updateStatus('txtDocumentCode', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	// CHECKING DUPLICATION OF MENU CODE FOR EDIT
+	$('#txtDocumentCodeEdit').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				txtDocumentCodeEdit:$(event.target).val(),
+			};
+		   //ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/check_document_edit",
+				type:"POST",
+				data:institutedata,
+				success:function(response)
+				{
+					var obj = jQuery.parseJSON(response);
+					if(obj.status)
+					{
+					 	$(event.target).val("");
+					 	$('#frmDocumentEdit').data('bootstrapValidator').updateStatus('txtDocumentCodeEdit', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	
+	//**************************************************** FOR CATEGORY TAB******************************//
+	
+	var categoryMaster = $('#tblCategoryMaster').dataTable({
+		
+		"sAjaxSource": base_url+"ajax_controller/select_category",
+		"bPaginate": true,
+        "bLengthChange": true,
+        "bFilter": true,
+        "bSort": false,
+        "bInfo": true,
+        "bAutoWidth": false,
+		"sDom":"<'row'<'col-xs-4'i><'col-xs-4'l><'col-xs-4'f>r>t<'row'<'col-xs-6' <'row' <'col-xs-8 categorybutton' >>><'col-xs-6'p>>",
+		"aoColumns": [
+	                     { "sName": "Slno","sWidth": "5%" },
+	                     { "sName": "Code" },
+	                     { "sName": "name" },
+	                     { "sName": "id","bVisible":false }
+        			]
+	});
+/**CREATING BUTTON*****/
+
+	$("div.categorybutton").html('<div class="btngroup"><button id="btnAddCategory" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i> Add</button>&nbsp;<button class="btn btn-success" id="btnEditCategory"><i class="fa fa-edit"></i> Edit</button>&nbsp;<button class="btn btn-danger" id="btnDeleteCategory"><i class="fa fa-trash-o" aria-hidden="true"></i> Delete</button></div>');
+
+/*****END OF BUTTON CREATION******/
+
+	$('#btnAddCategory').click(function(){
+		$('#frmCategoryAdd').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+		$('#txtCategoryCode').val("");
+		$('#txtCategoryName').val("");
+		$('#hidOperCategory').val("add_category");
+		
+		
+		$('#categoryAddModal').modal('show');
+		$('#categoryAddModal').on('shown.bs.modal', function () 
+		{ 
+			$('#txtCategoryCode').focus(); // Focusing the textbox
+		})
+	});
+	
+	$('#btnEditCategory').click(function(){
+		if(isEdit){
+			$('#hidOperCategoryEdit').val("edit_category");
+			$('#categoryEditModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}	
+	});
+	$('#btnDeleteCategory').click(function(){
+		if(isDelete){
+		
+		$('#categoryDeleteModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}
+		
+	});
+// to select data when edit button is click
+	$('#tblCategoryMaster tbody').on('click', function (event) {	
+		isEdit = true;	
+		isDelete = true;			
+			$(categoryMaster.fnSettings().aoData).each(function (){
+			$(this.nTr).removeClass('success');
+		});
+		var categoryID = categoryMaster.fnGetData( event.target.parentNode )[3];//GETTING DATA FOR HIDDEN COLUMN
+		if(event.target.tagName == "BUTTON" || event.target.tagName == "A" || event.target.tagName == "IMG")
+	  		row = event.target.parentNode.parentNode;
+		else if(event.target.tagName == "I")
+	  		row = event.target.parentNode.parentNode.parentNode; 
+	  	else
+	  		row = event.target.parentNode;
+		$(row).addClass('success');
+		$('#hidCUniqueidEdit').val(categoryID);//GETTING VALUE FOR HIDDEN COLUMN
+		
+		$('#txtCategoryCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtCategoryNameEdit').val(event.target.parentNode.cells[2].innerHTML);
+		
+	});
+//ADD RECORD WITH VALIDATION
+
+	$('#frmCategoryAdd').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			var formData = new FormData(document.getElementById("frmCategoryAdd"));
+			//ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/operation_category_add",
+				type:"post",
+				data:formData,
+				contentType: false,
+		    	processData: false,
+				success:function(response){  
+					try
+					{
+						var obj = jQuery.parseJSON(response);
+						if(obj.status == true)
+						{
+							toastr.success(obj.msg); 
+							var dtblProgram = $("#tblCategoryMaster").DataTable();
+		 					dtblProgram.ajax.reload();
+		 					$('#frmCategoryAdd').data('bootstrapValidator').resetForm(true);
+						}
+						else if(obj.status === 'validationerror'){
+		                	$('#errorlog_category').html(obj.msg);
+		                	$('#errorlog_category').show();
+		                }
+						else if(obj.status === 'xsserror'){
+		                	$('#errorlog_category').html(obj.msg);
+		                	$('#errorlog_category').show();
+		                }
+						else 
+						{
+							sweetAlert("CATEGORY",obj.msg, "error");	
+						}
+					}
+					catch(e)
+					{
+						sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+					}			
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});//end of ajax call	
+		},
+		fields: {
+			txtCategoryCode: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 8 characters'
+						}
+				}
+			},
+			txtCategoryName: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+	});
+//END OF ADD RECORD WITH VALIDATION
+
+
+//EDIT RECORD WITH VALIDATION
+
+	$('#frmCategoryEdit').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+					
+		var formData = new FormData(document.getElementById("frmCategoryEdit"));
+			//ajax call to server
+			$.ajax({
+				url:base_url+"ajax_controller/operation_category_edit",
+				type:"post",
+				data:formData,
+				contentType: false,
+		    	processData: false,
+				success:function(response){  
+					try
+					{
+						var obj = jQuery.parseJSON(response);
+						if(obj.status == true)
+						{
+							toastr.success(obj.msg);
+							// 
+							var dtblProgram = $("#tblCategoryMaster").DataTable();
+		 					dtblProgram.ajax.reload();
+		 					$('#frmCategoryEdit').data('bootstrapValidator').resetForm(true);
+							$('#categoryEditModal').modal('hide');
+				    		
+						}
+						else if(obj.status === 'validationerror'){
+		                	$('#errorlog_category_edit').html(obj.msg);
+		                	$('#errorlog_category_edit').show();
+		                }
+						else if(obj.status === 'xsserror'){
+		                	$('#errorlog_category_edit').html(obj.msg);
+		                	$('#errorlog_category_edit').show();
+		                }
+						else 
+						{
+							sweetAlert("CATEGORY",obj.msg, "error");	
+						}
+					}
+					catch(e)
+					{
+						sweetAlert("Sorry",'Unable to Save.Please Try Again !', "error");
+					}			
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});//end of ajax call	
+		},
+		fields:{
+			txtCategoryCodeEdit: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 8 characters'
+						}
+				}
+			},
+			txtCategoryNameEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+			
+	});
+//END OF EDIT RECORD WITH VALIDATION
+
+/****DELETE RECORD DELETE********/
+	$('#categoryDeleteRecord').click(function()
+	{
+		$('#categoryDeleteModal').modal('hide');		
+		var institutedata=
+		{
+			categoryID:$('#hidUniqueidEdit').val(),
+			type:"DELETE_CATEGORY"
+		};		
+		//ajax call to server
+		$.ajax({
+			url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+			mType:"post",
+			data:institutedata,
+			success:function()
+			{  
+				 var dtblProgram = $("#tblCategoryMaster").DataTable();
+	 			dtblProgram.ajax.reload();
+				toastr.success('Data Successfully Deleted');				 
+			},
+			error:function()
+			{
+				toastr.error('Unable to process please contact support');
+			}
+		});		
+	});
+	// CHECKING DUPLICATION OF MENU CODE 
+	$('#txtCategoryCode').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				txtCategoryCode:$(event.target).val(),
+				validatecategorycode:true,
+				type:"CHKDUCPLICATE_CATEGORY"
+			};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmCategoryAdd').data('bootstrapValidator').updateStatus('txtCategoryCode', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	// CHECKING DUPLICATION OF MENU CODE FOR EDIT
+	$('#txtCategoryCodeEdit').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				txtCategoryCodeEdit:$(event.target).val(),
+				validatecategorycode:true,
+				type:"CHKEDITDUCPLICATE_CATEGORY"
+			};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmCategoryEdit').data('bootstrapValidator').updateStatus('txtCategoryCodeEdit', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	
+	//************************************************ FOR MINORITY COMMUNITY TAB ******************************//
+	
+	var minoritycommunityMaster = $('#tblMinorityCommunityMaster').dataTable({
+		"sAjaxSource": base_url+"ajax_controller/select_minority",
+		//"sAjaxSource": "generic_setup1_db.php?_s="+MY_SESSION_NAME+"&type=SELECT_MINORITY",
+		"bPaginate": true,
+        "bLengthChange": true,
+        "bFilter": true,
+        "bSort": false,
+        "bInfo": true,
+        "bAutoWidth": false,
+		"sDom":"<'row'<'col-xs-4'i><'col-xs-4'l><'col-xs-4'f>r>t<'row'<'col-xs-6' <'row' <'col-xs-8 minoritycommunitybutton' >>><'col-xs-6'p>>",
+		"aoColumns": [
+	                     { "sName": "Slno","sWidth": "5%" },
+	                     { "sName": "Code" },
+	                     { "sName": "name" },
+	                     { "sName": "id","bVisible":false }
+        			]
+	});
+/**CREATING BUTTON*****/
+
+	$("div.minoritycommunitybutton").html('<div class="btngroup"><button id="btnAddMinoritycommunity" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i> Add</button>&nbsp;<button class="btn btn-success" id="btnEditMinoritycommunity"><i class="fa fa-edit"></i> Edit</button>&nbsp;<button class="btn btn-danger" id="btnDeleteMinoritycommunity"><i class="fa fa-trash-o" aria-hidden="true"></i> Delete</button></div>');
+
+/*****END OF BUTTON CREATION******/
+
+	$('#btnAddMinoritycommunity').click(function(){
+		$('#frmMinoritycommunityAdd').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+		$('#txtMinoritycommunityCode').val("");
+		$('#txtMinoritycommunityName').val("");
+		
+		
+		$('#minoritycommunityAddModal').modal('show');
+		$('#minoritycommunityAddModal').on('shown.bs.modal', function () 
+		{ 
+			$('#txtMinoritycommunityCode').focus(); // Focusing the textbox
+		})
+	});
+	
+	$('#btnEditMinoritycommunity').click(function(){
+		if(isEdit){
+			$('#minoritycommunityEditModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}	
+	});
+	$('#btnDeleteMinoritycommunity').click(function(){
+		if(isDelete){
+		
+		$('#minoritycommunityDeleteModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}
+		
+	});
+// to select data when edit button is click
+	$('#tblMinorityCommunityMaster tbody').on('click', function (event) {	
+		isEdit = true;	
+		isDelete = true;			
+			$(minoritycommunityMaster.fnSettings().aoData).each(function (){
+			$(this.nTr).removeClass('success');
+		});
+		var stateID = minoritycommunityMaster.fnGetData( event.target.parentNode )[3];//GETTING DATA FOR HIDDEN COLUMN
+		if(event.target.tagName == "BUTTON" || event.target.tagName == "A" || event.target.tagName == "IMG")
+	  		row = event.target.parentNode.parentNode;
+		else if(event.target.tagName == "I")
+	  		row = event.target.parentNode.parentNode.parentNode; 
+	  	else
+	  		row = event.target.parentNode;
+		$(row).addClass('success');
+		$('#hidUniqueidEdit').val(stateID);//GETTING VALUE FOR HIDDEN COLUMN
+		
+		$('#txtMinoritycommunityCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtMinoritycommunityNameEdit').val(event.target.parentNode.cells[2].innerHTML);
+		
+	});
+//ADD RECORD WITH VALIDATION
+
+	$('#frmMinoritycommunityAdd').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			var institutedata={
+				txtMinoritycommunityCode:$('#txtMinoritycommunityCode').val(),
+				txtMinoritycommunityName:$('#txtMinoritycommunityName').val(),
+				type:"INSERT_MINORITY"
+			};
+			//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){  
+					var dtblProgram = $("#tblMinorityCommunityMaster").DataTable();
+		 			dtblProgram.ajax.reload();
+		 			$('#frmMinoritycommunityAdd').data('bootstrapValidator').resetForm(true);	
+					toastr.success('Data Successfully Inserted');				
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});//end of ajax call	
+		},
+		fields: {
+			txtMinoritycommunityCode: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 8 characters'
+						}
+				}
+			},
+			txtMinoritycommunityName: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+	});
+//END OF ADD RECORD WITH VALIDATION
+
+
+//EDIT RECORD WITH VALIDATION
+
+	$('#frmMinoritycommunityEdit').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+					
+			var institutedata={
+				hidUniqueidEdit:$('#hidUniqueidEdit').val(),
+				txtMinoritycommunityCodeEdit:$('#txtMinoritycommunityCodeEdit').val(),
+				txtMinoritycommunityNameEdit:$('#txtMinoritycommunityNameEdit').val(),
+				type:"UPDATE_MINORITY"
+			};
+			//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){ 
+					$('#minoritycommunityEditModal').modal('hide'); 
+					var dtblProgram = $("#tblMinorityCommunityMaster").DataTable();
+		 			dtblProgram.ajax.reload();
+					toastr.success('Data Successfully Updated');		
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});
+		},
+		fields:{
+			txtMinoritycommunityCodeEdit: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 8 characters'
+						}
+				}
+			},
+			txtMinoritycommunityNameEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+			
+	});
+//END OF EDIT RECORD WITH VALIDATION
+
+/****DELETE RECORD DELETE********/
+	$('#minoritycommunityDeleteRecord').click(function()
+	{
+		$('#minoritycommunityDeleteModal').modal('hide');		
+		var institutedata=
+		{
+			minoritycommunityID:$('#hidUniqueidEdit').val(),
+			type:"DELETE_MINORITY"
+		};		
+		//ajax call to server
+		$.ajax({
+			url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+			mType:"post",
+			data:institutedata,
+			success:function()
+			{  
+				 var dtblProgram = $("#tblMinorityCommunityMaster").DataTable();
+	 			dtblProgram.ajax.reload();
+				toastr.success('Data Successfully Deleted');				 
+			},
+			error:function()
+			{
+				toastr.error('Unable to process please contact support');
+			}
+		});		
+	});
+	// CHECKING DUPLICATION OF BOARD CODE 
+	$('#txtMinoritycommunityCode').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				txtMinoritycommunityCode:$(event.target).val(),
+				validateminoritycommunitycode:true,
+				type:"CHKDUCPLICATE_MINORITY"
+			};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmMinoritycommunityAdd').data('bootstrapValidator').updateStatus('txtMinoritycommunityCode', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	// CHECKING DUPLICATION OF BOARD CODE FOR EDIT
+	$('#txtMinoritycommunityCodeEdit').on("change",function(event)
+	{
+			if($(event.target).val() != "" && $(event.target).val() != undefined)
+			{
+				var institutedata=
+				{
+					txtMinoritycommunityCodeEdit:$(event.target).val(),
+					validateminoritycommunitycode:true,
+					type:"CHKEDITDUCPLICATE_MINORITY"
+				};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmMinoritycommunityEdit').data('bootstrapValidator').updateStatus('txtMinoritycommunityCodeEdit', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	
+	//*********************************************** FOR CASTE TAB *********************************//
+	
+	var tblCaste = $('#tblCaste').dataTable({
+		"sAjaxSource": base_url+"ajax_controller/select_caste",	
+		"bPaginate": true,
+        "bLengthChange": true,
+        "bFilter": true,
+        "bSort": false,
+        "bInfo": true,
+		"bDestroy" : true,
+        "bAutoWidth": false,
+		"sDom":"<'row'<'col-xs-4'i><'col-xs-4'l><'col-xs-4'f>r>t<'row'<'col-xs-6' <'row' <'col-xs-8 castebutton' >>><'col-xs-6'p>>",
+		"aoColumns": [
+             { "sName": "Slno","sWidth": "5%" },
+             { "sName": "caste_master_code" },
+             { "sName": "caste_master_name" },
+			 { "sName": "Record Status","sWidth": "10%","sClass":"alignCenter",
+							"mRender": function( data, type, full ) {
+						        return '<img src="'+base_url+'public/assets/images/'+ data +'.png" ></img>';
+			 }},
+        ]
+	});
+		/**CREATING BUTTON*****/
+	$("div.castebutton").html('<div class="btngroup"><button id="btnAddCaste" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i> Add</button>&nbsp;<button class="btn btn-success" id="btnEditCaste"><i class="fa fa-edit"></i> Edit</button>&nbsp;<button class="btn btn-danger" id="btnDeleteCaste"><i class="fa fa-trash-o" aria-hidden="true"></i> Delete</button></div>');
+/*****END OF BUTTON CREATION******/
+	
+	
+	$('#btnAddCaste').click(function(){
+	//alert("hello");
+		//$('#frmAddCentre').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+		$('#txtCasteCode').val("");
+		$('#txtCasteName').val("");
+		
+		$('#txtStatus').val("");
+		
+		$('#CasteAddModal').modal('show');
+		$('#CasteAddModal').on('shown.bs.modal', function () 
+		{ 
+			$('#txtCasteCode').focus(); // Focusing the textbox
+		})
+	});
+	$('#btnEditCaste').click(function(){
+		if(isEdit){
+			$('#CasteEditModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}	
+	});
+	$('#btnDeleteCaste').click(function(){
+		if(isDelete){
+		
+		$('#CasteDeleteModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}
+		
+	});
+	 $('#tblCaste tbody').on('click', function (event) {	
+		isEdit = true;	
+		isDelete = true;		
+			$(tblCaste.fnSettings().aoData).each(function (){
+			$(this.nTr).removeClass('success');
+		});
+		var programCode = tblCaste.fnGetData( event.target.parentNode )[1];//GETTING DATA FOR HIDDEN COLUMN
+		if(event.target.tagName == "BUTTON" || event.target.tagName == "A" || event.target.tagName == "IMG")
+	  		row = event.target.parentNode.parentNode;
+		else if(event.target.tagName == "I")
+	  		row = event.target.parentNode.parentNode.parentNode; 
+	  	else
+	  		row = event.target.parentNode;
+		$(row).addClass('success');
+		$('#hidCasteCodeEdit').val(event.target.parentNode.cells[1].innerHTML);//GETTING VALUE FOR HIDDEN COLUMN
+		
+		//$('#cmbProgramCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtCasteCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtCasteNameEdit').val(event.target.parentNode.cells[2].innerHTML);
+		$('#cmbStatusEdit').val(event.target.parentNode.cells[3].innerHTML);
+		
+		var selectedText2 = tblCaste.fnGetData( event.target.parentNode )[3];
+		$("#cmbStatusEdit option").each(function () 
+		{
+			if ($(this).html() == selectedText2)
+		 	{
+				$(this).attr("selected", "selected");
+				return;
+			}
+		});
+	});
+
+   
+ 	$('#frmAddCaste').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			//alert($('#cmbProgramCode').val());
+			
+			var institutedata={
+				txtCasteCode:$('#txtCasteCode').val(),
+				txtCasteName:$('#txtCasteName').val(),
+				cmbStatus:$('#cmbStatus').val(),
+				type:"INSERT_CASTE"
+			};
+			//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){  
+					var dtblCaste = $("#tblCaste").DataTable();
+		 			dtblCaste.ajax.reload();
+		 			$('#frmAddCaste').data('bootstrapValidator').resetForm(true);	
+					toastr.success('Data Successfully Inserted');	
+					$('#CasteAddModal').modal('hide');			
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});//end of ajax call	
+		},
+		fields: {
+			txtCasteCode: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtCasteName: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbStatus: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+	});
+	$('#frmEditCaste').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+					
+			var institutedata={
+				hidCasteCodeEdit:$('#hidCasteCodeEdit').val(),
+				txtCasteCodeEdit:$('#txtCasteCodeEdit').val(),
+				txtCasteNameEdit:$('#txtCasteNameEdit').val(),
+				cmbStatusEdit:$('#cmbStatusEdit').val(),
+				type:"UPDATE_CASTE"
+			};
+			//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){ 
+							var dtblCenter = $("#tblCaste").DataTable();
+	 						dtblCenter.ajax.reload();
+							toastr.success('Data Successfully Updated');
+							$('#frmEditCaste').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+							$('#txtCasteCodeEdit').val("");
+							$('#txtCasteNameEdit').val("");
+								
+							$('#CasteEditModal').modal('hide');	
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});
+		},
+		fields:{
+			txtCasteCodeEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			txtCasteNameEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbStatusEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+			
+	});
+	$('#groupDeleteRecord').click(function()
+	{
+		$('#CasteDeleteModal').modal('hide');		
+		var institutedata=
+		{
+			hidCasteCodeEdit:$('#hidCasteCodeEdit').val(),
+			type:"DELETE_CASTE"
+		};		
+		//ajax call to server
+		$.ajax({
+			url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+			mType:"post",
+			data:institutedata,
+			success:function()
+			{  
+				
+				 var dtblChallan = $("#tblCaste").DataTable();
+	 			dtblChallan.ajax.reload();
+	 			
+				toastr.success('Data Successfully Deleted');				 
+			},
+			error:function()
+			{
+				toastr.error('Unable to process please contact support');
+			}
+		});		
+	});
+	$('#txtCasteCodeEdit').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				txtCasteCodeEdit:$(event.target).val(),
+				validateminoritycommunitycode:true,
+				type:"CHKEDITDUCPLICATE_CASTE"
+			};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmEditCaste').data('bootstrapValidator').updateStatus('txtCasteCodeEdit', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	// CHECKING DUPLICATION OF BOARD CODE FOR EDIT
+	$('#txtCasteCode').on("change",function(event)
+	{
+			if($(event.target).val() != "" && $(event.target).val() != undefined)
+			{
+				var institutedata=
+				{
+					txtCasteCode:$(event.target).val(),
+					validateminoritycommunitycode:true,
+					type:"CHKDUCPLICATE_CASTE"
+				};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmAddCaste').data('bootstrapValidator').updateStatus('txtCasteCode', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	
+	//************************************** FOR RELIGION TAB *************************************************//
+	
+	var religionMaster = $('#tblReligionMaster').dataTable({
+		
+		"sAjaxSource": base_url+"ajax_controller/select_religion",
+		"bPaginate": true,
+        "bLengthChange": true,
+        "bFilter": true,
+        "bSort": false,
+        "bInfo": true,
+        "bAutoWidth": false,
+		"sDom":"<'row'<'col-xs-4'i><'col-xs-4'l><'col-xs-4'f>r>t<'row'<'col-xs-6' <'row' <'col-xs-8 religionbutton' >>><'col-xs-6'p>>",
+		"aoColumns": [
+	                     { "sName": "Slno","sWidth": "5%" },
+	                     { "sName": "Code" },
+	                     { "sName": "name" },
+	                     { "sName": "id","bVisible":false }
+        			]
+	});
+/**CREATING BUTTON*****/
+
+	$("div.religionbutton").html('<div class="btngroup"><button id="btnAddReligon" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i> Add</button>&nbsp;<button class="btn btn-success" id="btnEditReligion"><i class="fa fa-edit"></i> Edit</button>&nbsp;<button class="btn btn-danger" id="btnDeleteReligion"><i class="fa fa-trash-o" aria-hidden="true"></i> Delete</button></div>');
+
+/*****END OF BUTTON CREATION******/
+
+	$('#btnAddReligon').click(function(){
+		$('#frmReligionAdd').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+		$('#txtReligionCode').val("");
+		$('#txtReligionName').val("");
+		
+		
+		$('#religionAddModal').modal('show');
+		$('#religionAddModal').on('shown.bs.modal', function () 
+		{ 
+			$('#txtReligionCode').focus(); // Focusing the textbox
+		})
+	});
+	
+	$('#btnEditReligion').click(function(){
+		if(isEdit){
+			$('#religionEditModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}	
+	});
+	$('#btnDeleteReligion').click(function(){
+		if(isDelete){
+		
+		$('#religionDeleteModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}
+		
+	});
+// to select data when edit button is click
+	$('#tblReligionMaster tbody').on('click', function (event) {	
+		isEdit = true;	
+		isDelete = true;			
+			$(religionMaster.fnSettings().aoData).each(function (){
+			$(this.nTr).removeClass('success');
+		});
+		var stateID = religionMaster.fnGetData( event.target.parentNode )[3];//GETTING DATA FOR HIDDEN COLUMN
+		if(event.target.tagName == "BUTTON" || event.target.tagName == "A" || event.target.tagName == "IMG")
+	  		row = event.target.parentNode.parentNode;
+		else if(event.target.tagName == "I")
+	  		row = event.target.parentNode.parentNode.parentNode; 
+	  	else
+	  		row = event.target.parentNode;
+		$(row).addClass('success');
+		$('#hidUniqueidEdit').val(stateID);//GETTING VALUE FOR HIDDEN COLUMN
+		
+		$('#txtReligionCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#txtReligionNameEdit').val(event.target.parentNode.cells[2].innerHTML);
+		
+	});
+//ADD RECORD WITH VALIDATION
+
+	$('#frmReligionAdd').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			var institutedata={
+				txtReligionCode:$('#txtReligionCode').val(),
+				txtReligionName:$('#txtReligionName').val(),
+				type:"INSERT_RELIGION"
+			};
+			//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){  
+					var dtblProgram = $("#tblReligionMaster").DataTable();
+		 			dtblProgram.ajax.reload();
+		 			$('#frmReligionAdd').data('bootstrapValidator').resetForm(true);	
+					toastr.success('Data Successfully Inserted');				
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});//end of ajax call	
+		},
+		fields: {
+			txtReligionCode: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 8 characters'
+					}
+				}
+			},
+			txtReligionName: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+	});
+//END OF ADD RECORD WITH VALIDATION
+
+
+//EDIT RECORD WITH VALIDATION
+
+	$('#frmReligionEdit').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+					
+			var institutedata={
+				hidUniqueidEdit:$('#hidUniqueidEdit').val(),
+				txtReligionCodeEdit:$('#txtReligionCodeEdit').val(),
+				txtReligionNameEdit:$('#txtReligionNameEdit').val(),
+				type:"UPDATE_RELIGION"
+			};
+			//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){ 
+							$('#religionEditModal').modal('hide'); 
+							var dtblProgram = $("#tblReligionMaster").DataTable();
+				 			dtblProgram.ajax.reload();
+							toastr.success('Data Successfully Updated');		
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});
+		},
+		fields:{
+			txtReligionCodeEdit: {							//form input type name
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					},
+					regexp: {
+						regexp: /^([A-Za-z0-9\s]+)$/i,
+						message: "Special characters are not allowed"
+					},
+					stringLength: {
+						max: 8,
+						message: 'Code should not be more then 8 characters'
+						}
+				}
+			},
+			txtReligionNameEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+			
+	});
+//END OF EDIT RECORD WITH VALIDATION
+
+/****DELETE RECORD DELETE********/
+	$('#religionDeleteRecord').click(function()
+	{
+		$('#religionDeleteModal').modal('hide');		
+		var institutedata=
+		{
+			religionID:$('#hidUniqueidEdit').val(),
+			type:"DELETE_RELIGION"
+		};		
+		//ajax call to server
+		$.ajax({
+			url:"generic_setup1_db.php_s="+MY_SESSION_NAME,
+			mType:"post",
+			data:institutedata,
+			success:function()
+			{  
+				 var dtblProgram = $("#tblReligionMaster").DataTable();
+	 			dtblProgram.ajax.reload();
+				toastr.success('Data Successfully Deleted');				 
+			},
+			error:function()
+			{
+				toastr.error('Unable to process please contact support');
+			}
+		});		
+	});
+	// CHECKING DUPLICATION OF BOARD CODE 
+	$('#txtReligionCode').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				txtReligionCode:$(event.target).val(),
+				validatereligioncode:true,
+				type:"CHKDUCPLICATE_RELIGION"
+			};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmReligionAdd').data('bootstrapValidator').updateStatus('txtReligionCode', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	// CHECKING DUPLICATION OF BOARD CODE FOR EDIT
+	$('#txtReligionCodeEdit').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				txtReligionCodeEdit:$(event.target).val(),
+				validatereligioncode:true,
+				type:"CHKEDITDUCPLICATE_RELIGION"
+			};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmReligionEdit').data('bootstrapValidator').updateStatus('txtReligionCodeEdit', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	
+	//***************************************** FOR INSTRUCTION TAB ******************************//
+	
+	var tblInst = $('#tblInstruction').dataTable({
+		"sAjaxSource": base_url+"ajax_controller/select_instruction",
+		"bPaginate": true,
+        "bLengthChange": true,
+        "bFilter": true,
+        "bSort": false,
+        "bInfo": true,
+		"bDestroy" : true,
+        "bAutoWidth": true,
+		"sDom":"<'row'<'col-xs-4'i><'col-xs-4'l><'col-xs-4'f>r>t<'row'<'col-xs-6' <'row' <'col-xs-8 instructionbutton' >>><'col-xs-6'p>>",
+		"aoColumns": [
+	                     { "sName": "Slno" ,"sWidth": "5%"},
+	                     { "sName": "page_code" },
+	                     { "sName": "instruction_text","bVisible":false },
+	                     { "sName": "instruction","bVisible":false },
+						 { "sName": "Record Status","sWidth": "10%","sClass":"alignCenter"
+					   }},
+        			]
+		});
+		/**CREATING BUTTON*****/
+	$("div.instructionbutton").html('<div class="btngroup"><button id="btnAddInstruction" class="btn btn-primary"><i class="fa fa-plus" aria-hidden="true"></i> Add</button>&nbsp;<button class="btn btn-success" id="btnEditInstruction"><i class="fa fa-edit"></i> Edit</button>&nbsp;<button class="btn btn-danger" id="btnDeleteInstruction"><i class="fa fa-trash-o" aria-hidden="true"></i> Delete</button></div>');
+/*****END OF BUTTON CREATION******/
+	
+	
+	$('#btnAddInstruction').click(function(){
+	//alert("hello");
+		CKEDITOR.instances['taInstruction'].setData("");
+		$('#frmAddInstruction').data('bootstrapValidator').resetForm(true);	
+		$('#cmbPageCode').val("");
+		
+		$('#cmbStatus').val("");
+		
+		$('#InstructionAddModal').modal('show');
+		$('#InstructionAddModal').on('shown.bs.modal', function () 
+		{ 
+			$('#cmbPageCode').focus(); // Focusing the textbox
+		})
+	});
+	$('#btnEditInstruction').click(function(){
+		if(isEdit){
+			$('#InstructionEditModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}	
+	});
+	$('#btnDeleteInstruction').click(function(){
+		if(isDelete){
+			$('#InstructionDeleteModal').modal('show');
+		}
+		else{
+			toastr.error("Please Select a record");
+		}
+		
+	});
+	 $('#tblInstruction tbody').on('click', function (event) {	
+		isEdit = true;	
+		isDelete = true;		
+			$(tblInst.fnSettings().aoData).each(function (){
+			$(this.nTr).removeClass('success');
+		});
+		//alert(event.target.parentNode.parentNode);
+		//var programCode = challanMaster.fnGetData( event.target.parentNode )[1];//GETTING DATA FOR HIDDEN COLUMN
+		if(event.target.tagName == "BUTTON" || event.target.tagName == "A" || event.target.tagName == "IMG")
+	  		row = event.target.parentNode.parentNode;
+		else if(event.target.tagName == "I")
+	  		row = event.target.parentNode.parentNode.parentNode; 
+	  	else
+	  		row = event.target.parentNode;
+		$(row).addClass('success');
+		$('#hidInstructionCodeEdit').val(event.target.parentNode.cells[1].innerHTML);//GETTING VALUE FOR HIDDEN COLUMN
+		
+		//$('#cmbProgramCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		$('#cmbPageCodeEdit').val(event.target.parentNode.cells[1].innerHTML);
+		//$('#taInstructionEdit').val(event.target.parentNode.cells[2].innerHTML);
+		var instruction = tblInst.fnGetData( event.target.parentNode )[2];
+		CKEDITOR.instances['taInstructionEdit'].setData(instruction);
+		//$("#cmbStatusEdit").val(event.target.parentNode.cells[2].innerHTML);
+	});
+
+   
+ 	$('#frmAddInstruction').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+			//alert($('#cmbProgramCode').val());
+			
+			var institutedata={
+				cmbPageCode:$('#cmbPageCode').val(),
+				cmbStatus:$('#cmbStatus').val(),
+				taInstruction:CKEDITOR.instances['taInstruction'].getData(),
+				type:"INSERT_INSTRUCTION"
+			};
+			//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){  
+					var dtblInstruction = $("#tblInstruction").DataTable();
+		 			dtblInstruction.ajax.reload();
+		 			$('#frmAddInstruction').data('bootstrapValidator').resetForm(true);	
+					toastr.success('Data Successfully Inserted');	
+					$('#InstructionAddModal').modal('hide');			
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});//end of ajax call	
+		},
+		fields: {
+			cmbPageCode: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			taInstruction: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbStatus: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+	});
+	$('#frmEditInstruction').bootstrapValidator({
+		message: 'This value is not valid',
+        feedbackIcons: {
+            valid: 'glyphicon glyphicon-ok',
+            invalid: 'glyphicon glyphicon-remove',
+            validating: 'glyphicon glyphicon-refresh'
+        },
+		submitButtons: 'button[type="submit"]',
+		submitHandler: function(validator, form, submitButton) 
+		{
+					
+			var institutedata={
+				hidInstructionCodeEdit:$('#hidInstructionCodeEdit').val(),
+				cmbPageCodeEdit:$('#cmbPageCodeEdit').val(),
+				taInstructionEdit:CKEDITOR.instances['taInstructionEdit'].getData(),
+				cmbStatusEdit:$('#cmbStatusEdit').val(),
+				type:"UPDATE_INSTRUCTION"
+			};
+			//ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"post",
+				data:institutedata,
+				success:function(){ 
+					var dtblCenter = $("#tblInstruction").DataTable();
+					dtblCenter.ajax.reload();
+					toastr.success('Data Successfully Updated');
+					$('#frmEditInstruction').data('bootstrapValidator').resetForm(true);//Reseting the tick marks before opening add modal	
+					$('#cmbPageCodeEdit').val("");
+					CKEDITOR.instances['taInstructionEdit'].setData("");	
+					$('#InstructionEditModal').modal('hide');	
+				},
+				error:function(){
+					toastr.error('Unable to process please contact support');
+				}
+			});
+		},
+		fields:{
+			cmbPageCodeEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			taInstructionEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			},
+			cmbStatusEdit: {
+				validators: {
+					notEmpty: {
+						message: 'This field can\'t left blank'
+					}
+				}
+			}
+		}
+			
+	});
+	$('#groupDeleteRecord').click(function()
+	{
+		$('#InstructionDeleteModal').modal('hide');		
+		var institutedata=
+		{
+			hidInstructionCodeEdit:$('#hidInstructionCodeEdit').val(),
+			type:"DELETE_INSTRUCTION"
+		};		
+		//ajax call to server
+		$.ajax({
+			url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+			mType:"post",
+			data:institutedata,
+			success:function()
+			{  
+				
+				 var dtblChallan = $("#tblInstruction").DataTable();
+	 			dtblChallan.ajax.reload();
+	 			
+				toastr.success('Data Successfully Deleted');				 
+			},
+			error:function()
+			{
+				toastr.error('Unable to process please contact support');
+			}
+		});		
+	});
+	$('#cmbPageCode').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				cmbPageCode:$(event.target).val(),
+				validatereligioncode:true,
+				type:"CHKDUCPLICATE_INSTRUCTION"
+			};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php?_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmAddInstruction').data('bootstrapValidator').updateStatus('cmbPageCode', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	// CHECKING DUPLICATION OF BOARD CODE FOR EDIT
+	$('#cmbPageCodeEdit').on("change",function(event)
+	{
+		if($(event.target).val() != "" && $(event.target).val() != undefined)
+		{
+			var institutedata=
+			{
+				cmbPageCodeEdit:$(event.target).val(),
+				validatereligioncode:true,
+				type:"CHKEDITDUCPLICATE_INSTRUCTION"
+			};
+		   //ajax call to server
+			$.ajax({
+				url:"generic_setup1_db.php_s="+MY_SESSION_NAME,
+				mType:"get",
+				data:institutedata,
+				success:function(response)
+				{
+					if(response!="")
+					{
+					 	$(event.target).val("");
+					 	$('#frmEditInstruction').data('bootstrapValidator').updateStatus('cmbPageCodeEdit', 'INVALID', null);
+						toastr.error('Code Already Created');
+						$(event.target).focus();					
+					}
+					else
+					{
+						return false;
+					}
+				},  
+				error:function()
+				{
+					toastr.error('Unable to process please contact support');
+				}
+			}); 
+		}
+	}); 
+	
+	
+	/* CODE FOR TOOLTIP */
+	$('.tooltips').tooltipster({
+		theme: 'tooltipster-punk',
+		animation: 'grow',
+        delay: 200, 
+        touchDevices: false,
+        trigger: 'hover'
+     });	
+/* END OF TOOLTIP */
+	/* CODE FOR TOASTR */
+	toastr.options = {
+	  "closeButton": true,
+	  "debug": false,
+	  "progressBar": false,
+	  "positionClass": "toast-bottom-right",//top-right,bottom-left,top-left,top-full-width,bottom-full-width,top-center,bottom-center
+	  "onclick": null,
+	  "showDuration": "20000",
+	  "hideDuration": "1000",
+	  "timeOut": "5000",
+	  "extendedTimeOut": "1000",
+	  "showEasing": "swing",
+	  "hideEasing": "linear",
+	  "showMethod": "fadeIn",
+	  "hideMethod": "fadeOut"
+	}
+/* END OF CODE FOR TOASTR*/	
+
+	CKEDITOR.replace( 'taInstruction',
+    {
+    	toolbarCanCollapse: false,
+    	toolbarStartupExpanded: true,
+    	removePlugins : 'elementspath'
+		
+	});
+	CKEDITOR.replace( 'taInstructionEdit',
+    {
+    	toolbarCanCollapse: false,
+    	toolbarStartupExpanded: true,
+    	removePlugins : 'elementspath'
+		
+	});
+});
+function isNumber(evt) {
+    evt = (evt) ? evt : window.event;
+    var charCode = (evt.which) ? evt.which : evt.keyCode;
+	    if (charCode > 31 && (charCode < 48 || charCode > 57)) {
+	        return false;
+	    }
+    return true;
+}
