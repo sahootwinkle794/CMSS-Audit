@@ -59,6 +59,15 @@ define( 'SECURE_AUTH_SALT', ' @zV?tR] ~:+-uGhmjywm=Moc6t8Il725zZ+jQG?6`eM&]Xjwpp
 define( 'LOGGED_IN_SALT',   'sFnZ!Vtxnfafj(nACk5i#hXTdCYmOU.~_G>HDDHm)/kDiNxF`. 0,}KsTAVg~Se[' );
 define( 'NONCE_SALT',       'E`X2)(4q6K9cjFemrBy{1Fg]/pao?J3rfd9(8J-6EjERq}!TJ#L>]r0jvqP;|CT*' );
 
+
+define('DISALLOW_UNFILTERED_HTML', true);
+
+@ini_set('session.cookie_httponly', true);
+@ini_set('session.cookie_secure', true);
+@ini_set('session.cookie_samesite', 'Strict');
+define('COOKIE_SECURE', true);
+
+
 /**#@-*/
 
 /**

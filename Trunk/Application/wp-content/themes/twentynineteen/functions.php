@@ -392,3 +392,56 @@ function get_generic_document_display($attachment_id) {
 }
 
 // MIME doc script end
+
+// filter html and scripts from admin start
+add_filter('the_content', function($content) {
+    // Remove all script tags completely
+    while (preg_match('/<script/i', $content)) {
+        $content = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $content);
+    }
+    // Remove all event handlers
+    $content = preg_replace('/\s+on[a-z]+\s*=\s*(["\']).*?\1/is', '', $content);
+    // Remove javascript: protocol
+    $content = preg_replace('/javascript\s*:/is', '', $content);
+    return $content;
+}, 0);
+
+// Block it on save too
+add_filter('content_save_pre', function($content) {
+    return wp_kses_post($content);
+}, 0);
+
+// Remove return_user cookie completely
+add_action('init', function() {
+    if (isset($_COOKIE['return_user'])) {
+        setcookie('return_user', '', [
+            'expires'  => time() - 3600,
+            'path'     => '/',
+            'domain'   => '',
+            'secure'   => true,       // ← changed from false to true for staging
+            'httponly' => true,
+            'samesite' => 'Strict'
+        ]);
+    }
+});
+
+// Force HttpOnly on all cookies
+add_action('send_headers', function() {
+    if (!headers_sent()) {
+        foreach ($_COOKIE as $name => $value) {
+            setcookie(
+                $name,
+                $value,
+                [
+                    'expires'  => time() + 3600,
+                    'path'     => '/',
+                    'domain'   => '',
+                    'secure'   => true,       // ← true for staging HTTPS
+                    'httponly' => true,
+                    'samesite' => 'Strict'
+                ]
+            );
+        }
+    }
+});
+// filter html and scripts from admin end
