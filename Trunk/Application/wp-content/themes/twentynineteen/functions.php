@@ -445,3 +445,121 @@ add_action('send_headers', function() {
     }
 });
 // filter html and scripts from admin end
+
+// style injection protect start 
+
+// ============================================================
+// 1. STRIP ALL DANGEROUS TAGS BEFORE STORING IN DATABASE
+// ============================================================
+add_filter('content_save_pre', function($content) {
+    // Remove <style> tags — prevents defacement
+    $content = preg_replace('/<style\b[^>]*>.*?<\/style>/is', '', $content);
+    
+    // Remove <script> tags — prevents XSS
+    $content = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $content);
+    
+    // Remove <iframe> tags — prevents clickjacking
+    $content = preg_replace('/<iframe\b[^>]*>.*?<\/iframe>/is', '', $content);
+    
+    // Remove <object> tags
+    $content = preg_replace('/<object\b[^>]*>.*?<\/object>/is', '', $content);
+    
+    // Remove <embed> tags
+    $content = preg_replace('/<embed\b[^>]*>.*?<\/embed>/is', '', $content);
+    
+    // Remove on* event attributes (onclick, onmouseover etc)
+    $content = preg_replace('/\s*on\w+\s*=\s*["\'][^"\']*["\']/i', '', $content);
+    
+    // Rewrite external links to warning page
+    $site_host = parse_url(home_url(), PHP_URL_HOST);
+    $pattern = '#<a\s+([^>]*?)href=["\'](' . 'https?://(?!' . preg_quote($site_host, '#') . ')[^"\']+)["\']([^>]*)>#is';
+    $content = preg_replace_callback($pattern, function($matches) {
+        $warning_url = home_url('/external-warning/?redirect=' . urlencode($matches[2]));
+        return '<a ' . $matches[1] . 'href="' . esc_url($warning_url) . '"' . $matches[3] . '>';
+    }, $content);
+    
+    return $content;
+});
+
+// ============================================================
+// 2. STRIP DANGEROUS TAGS ON FRONTEND (FOR EXISTING POSTS)
+// ============================================================
+add_action('wp', function() {
+    if (!is_admin()) {
+        add_filter('the_content', function($content) {
+            $content = preg_replace('/<style\b[^>]*>.*?<\/style>/is', '', $content);
+            $content = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $content);
+            $content = preg_replace('/<iframe\b[^>]*>.*?<\/iframe>/is', '', $content);
+            $content = preg_replace('/<object\b[^>]*>.*?<\/object>/is', '', $content);
+            $content = preg_replace('/<embed\b[^>]*>.*?<\/embed>/is', '', $content);
+            $content = preg_replace('/\s*on\w+\s*=\s*["\'][^"\']*["\']/i', '', $content);
+            return $content;
+        });
+    }
+});
+
+// ============================================================
+// 3. REMOVE UNFILTERED HTML CAPABILITY FROM NON-ADMINS
+// ============================================================
+add_action('init', function() {
+    $roles = array('editor', 'author', 'contributor');
+    foreach ($roles as $role_name) {
+        $role = get_role($role_name);
+        if ($role) {
+            $role->remove_cap('unfiltered_html');
+        }
+    }
+    
+    // Register external warning rewrite rule
+    add_rewrite_rule('^external-warning/?$', 'index.php?external_warning=1', 'top');
+});
+
+// ============================================================
+// 4. FORCE VISUAL EDITOR FOR NON-ADMINS
+// ============================================================
+add_filter('wp_default_editor', function($editor) {
+    if (!current_user_can('administrator')) {
+        return 'tinymce';
+    }
+    return $editor;
+});
+
+// ============================================================
+// 5. SECURITY HEADERS
+// ============================================================
+add_action('send_headers', function() {
+    header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; object-src 'none'; frame-ancestors 'none';");
+    header("X-Frame-Options: SAMEORIGIN");
+    header("X-Content-Type-Options: nosniff");
+    header("X-XSS-Protection: 1; mode=block");
+});
+
+// ============================================================
+// 6. EXTERNAL WARNING PAGE QUERY VAR
+// ============================================================
+add_filter('query_vars', function($vars) {
+    $vars[] = 'external_warning';
+    return $vars;
+});
+
+// ============================================================
+// 7. LOAD EXTERNAL WARNING TEMPLATE
+// ============================================================
+add_action('template_redirect', function() {
+    if (!get_query_var('external_warning')) return;
+
+    $redirect_url = isset($_GET['redirect']) ? esc_url_raw($_GET['redirect']) : '';
+    $site_host    = parse_url(home_url(), PHP_URL_HOST);
+
+    if (empty($redirect_url) || parse_url($redirect_url, PHP_URL_HOST) === $site_host) {
+        wp_redirect(home_url());
+        exit;
+    }
+
+    load_template(get_template_directory() . '/external-warning.php');
+    exit;
+});
+
+
+
+// style injection protect end 
