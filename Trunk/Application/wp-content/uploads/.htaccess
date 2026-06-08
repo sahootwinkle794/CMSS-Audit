@@ -1,0 +1,9 @@
+Options -Indexes
+
+RewriteEngine On
+
+RewriteCond %{HTTP_REFERER} !^http://localhost [NC]
+RewriteCond %{HTTP_REFERER} !^http://127.0.0.1 [NC]
+RewriteCond %{HTTP_REFERER} !^https://gov.silicontechlab.com [NC]
+RewriteCond %{HTTP_REFERER} !^http://www.cmss.gov.in [NC]
+RewriteRule \.(pdf|doc|docx|xls|xlsx)$ - [F,NC]

@@ -20,6 +20,21 @@
 
 // ** MySQL settings - You can get this info from your web host ** //
 /** The name of the database for WordPress */
+
+
+$key = 'cmss_new-secret-key-026';
+
+// Decrypt password at runtime
+$password = openssl_decrypt(
+    base64_decode('NUM1VEpVUUFhVkM4azJjcFJjZ1ZzZz09'),
+    'AES-256-CBC',
+    $key,
+    0,
+    substr($key, 0, 16)
+);
+
+
+
 define( 'DB_NAME', 'cmss' );
 
 /** MySQL database username */
@@ -27,7 +42,7 @@ define( 'DB_NAME', 'cmss' );
 define( 'DB_USER', 'cmss' );
 
 /** MySQL database password */
-define( 'DB_PASSWORD', 'Cm5s@2026#' );
+define( 'DB_PASSWORD', $password );
 
 // define( 'DB_PASSWORD', 'Cm55@2022' );
 
