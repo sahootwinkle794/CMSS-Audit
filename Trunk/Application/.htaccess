@@ -7,6 +7,21 @@
     Header set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;"
 </IfModule>
 
+# Block robots.txt from public access
+RewriteEngine On
+RewriteRule ^robots\.txt$ - [F,L]
+
+<Files "robots.txt">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+# Block lostpassword action from URL
+RewriteEngine On
+RewriteCond %{QUERY_STRING} action=lostpassword [NC]
+RewriteRule ^ - [F,L]
+
+
 # BEGIN WordPress
 # The directives (lines) between "BEGIN WordPress" and "END WordPress" are
 # dynamically generated, and should only be modified via WordPress filters.
