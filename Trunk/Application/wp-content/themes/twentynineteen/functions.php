@@ -563,3 +563,15 @@ add_action('template_redirect', function() {
 
 
 // style injection protect end 
+
+// secure from domain script inject 
+add_filter('script_loader_tag', function ($tag, $handle, $src) {
+    $hashes = [
+        'jquery-core' => 'sha384-REPLACE_WITH_REAL_HASH',
+    ];
+    if (isset($hashes[$handle])) {
+        $tag = str_replace(' src=', ' integrity="' . $hashes[$handle] . '" crossorigin="anonymous" src=', $tag);
+    }
+    return $tag;
+}, 10, 3);
+// secure from domain script inject 
