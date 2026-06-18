@@ -8,6 +8,52 @@
  * @package WordPress
  */
 
+function wp_login_strict_input_block() {
+?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    function block(e){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return false;
+    }
+
+    function applyBlock(selector){
+        const el = document.querySelector(selector);
+        if(!el) return;
+
+        // HTML-level attempt
+        el.setAttribute('onpaste', 'return false');
+        el.setAttribute('ondrop', 'return false');
+        el.setAttribute('autocomplete', 'off');
+
+        // JS event blocking
+        el.addEventListener('paste', block, true);
+        el.addEventListener('copy', block, true);
+        el.addEventListener('cut', block, true);
+        el.addEventListener('drop', block, true);
+
+        // keyboard shortcuts
+        el.addEventListener('keydown', function(e){
+            if ((e.ctrlKey || e.metaKey) &&
+                ['v','c','x'].includes(e.key.toLowerCase())) {
+                block(e);
+            }
+        }, true);
+    }
+
+    applyBlock('#user_login');
+    applyBlock('#user_pass');
+
+});
+</script>
+<?php
+}
+add_action('login_footer', 'wp_login_strict_input_block');
+
+
+
 /** Make sure that the WordPress bootstrap has run before continuing. */
 require __DIR__ . '/wp-load.php';
 
