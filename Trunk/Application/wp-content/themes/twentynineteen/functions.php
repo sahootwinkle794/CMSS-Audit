@@ -426,6 +426,7 @@ add_action('init', function() {
 });
 
 // Force HttpOnly on all cookies
+/*
 add_action('send_headers', function() {
     if (!headers_sent()) {
         foreach ($_COOKIE as $name => $value) {
@@ -442,6 +443,14 @@ add_action('send_headers', function() {
                 ]
             );
         }
+    }
+});
+*/
+
+add_action('send_headers', function() {
+    if (isset($_COOKIE['return_user'])) {
+        setcookie('return_user', '', time() - 3600, '/');
+        unset($_COOKIE['return_user']);
     }
 });
 // filter html and scripts from admin end
