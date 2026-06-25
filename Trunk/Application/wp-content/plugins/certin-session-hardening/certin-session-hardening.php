@@ -150,3 +150,40 @@ function certin_password_error_handling($errors, $update, $user) {
 
     return $errors;
 }
+
+
+add_filter('acf/validate_value/name=blacklisted_upto', 'validate_blacklist_dates', 10, 4);
+
+function validate_blacklist_dates($valid, $value, $field, $input) {
+
+    if (!$valid) {
+        return $valid;
+    }
+
+    // Replace with YOUR actual field key
+    $from_date = $_POST['acf']['blacklisted_from'] ?? '';
+
+    $to_date = $value;
+
+    if ($from_date && $to_date) {
+
+        $from = strtotime($from_date);
+        $to   = strtotime($to_date);
+
+        if ($to <= $from) {
+            return 'Blacklisted Upto date must be greater than Blacklisted From date.';
+        }
+    }
+
+    return $valid;
+}
+
+add_action('acf/input/admin_enqueue_scripts', function() {
+    wp_enqueue_script(
+        'certin-acf',
+        plugin_dir_url(__FILE__) . 'certin-acf.js',
+        ['jquery'],
+        null,
+        true
+    );
+});

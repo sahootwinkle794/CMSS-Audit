@@ -44,7 +44,6 @@ define( 'DB_USER', 'cmss' );
 /** MySQL database password */
 define( 'DB_PASSWORD', $password );
 
-// define( 'DB_PASSWORD', 'Cm55@2022' );
 
 /** MySQL hostname */
 define( 'DB_HOST', '103.39.241.183' );
