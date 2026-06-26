@@ -38,7 +38,6 @@ $password = openssl_decrypt(
 define( 'DB_NAME', 'cmss' );
 
 /** MySQL database username */
-// define( 'DB_USER', 'root' );
 define( 'DB_USER', 'cmss' );
 
 /** MySQL database password */
